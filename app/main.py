@@ -12,6 +12,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from core.query_classifier import QueryClassifier
 from core.retriever import Retriever
+from core.llm import generate_answer
 from utils.file_utils import process_uploaded_files, load_file_library
 
 load_dotenv()
@@ -72,12 +73,29 @@ class InfoSynthApp:
         if self.retriever:
             st.markdown("---")
             st.subheader("🔎 Top Retrieved Chunks")
+
             results = self.retriever.search(analysis.corrected_query)
-            for chunk, source, score in results:
-                st.markdown(f"📄 **Source:** `{source}`")
-                st.markdown(f"🧩 **Score:** {score:.4f}")
-                st.markdown(f"> {chunk[:300]}...")
+
+            if results:
+                with st.spinner("Generating answer with Gemini..."):
+                    top_chunks = [r[0] for r in results]
+                    sources = [r[1] for r in results]
+
+                    answer = generate_answer(query, top_chunks)
+
+                    st.markdown("### 💬 Answer")
+                    st.success(answer)
+
+                    st.markdown("### 📂 Sources")
+                    for i, src in enumerate(sources):
+                        st.markdown(f"**{i+1}.** `{src}`")
+
                 st.markdown("---")
+                for chunk, source, score in results:
+                    st.markdown(f"📄 **Source:** `{source}`")
+                    st.markdown(f"🧩 **Score:** {score:.4f}")
+                    st.markdown(f"> {chunk[:300]}...")
+                    st.markdown("---")
 
     def render_ui(self):
         """Render the main user interface"""
