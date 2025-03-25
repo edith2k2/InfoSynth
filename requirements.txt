@@ -6,3 +6,4 @@ symspellpy
 scikit-learn
 pymupdf
 colorama
+google-generativeai
