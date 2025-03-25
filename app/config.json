@@ -1,0 +1,11 @@
+{
+    "upload_dir": "data/uploads",
+    "library_path": "data/library.json",
+    "allowed_extensions": ["txt", "pdf"],
+    "page_title": "InfoSynth",
+    "page_layout": "wide",
+    "index_dir": "data/indices",
+    "embedding_model": "sentence-transformers/all-mpnet-base-v2",
+    "max_search_steps": 3,
+    "top_k": 5
+}

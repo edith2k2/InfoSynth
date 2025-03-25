@@ -1,0 +1,8 @@
+streamlit
+watchdog
+python-dotenv
+spacy
+symspellpy
+scikit-learn
+pymupdf
+colorama
