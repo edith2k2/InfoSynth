@@ -2,6 +2,9 @@
     "upload_dir": "data/uploads",
     "library_path": "data/library.json",
     "allowed_extensions": ["txt", "pdf"],
+    "watch_folders": [
+        "test/downloads"
+    ],
     "page_title": "InfoSynth",
     "page_layout": "wide",
     "index_dir": "data/indices",
