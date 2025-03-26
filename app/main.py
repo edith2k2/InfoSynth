@@ -1,3 +1,5 @@
+import threading
+import time
 import streamlit as st
 from pathlib import Path
 import os
@@ -14,6 +16,8 @@ from core.query_classifier import QueryClassifier
 from core.retriever import Retriever
 from core.llm import generate_answer
 from utils.file_utils import process_uploaded_files, load_file_library
+from utils import watcher_state
+from utils.file_watcher import start_watcher
 
 load_dotenv()
 
@@ -24,6 +28,7 @@ class InfoSynthApp:
         self.upload_dir = Path(self.config.get("upload_dir", "data/uploads"))
         self.library_path = Path(self.config.get("library_path", "data/library.json"))
         self.allowed_extensions = self.config.get("allowed_extensions", ["pdf"])
+        self.watch_folders = [Path(p) for p in self.config.get("watch_folders")]
         self.page_title = self.config.get("page_title", "InfoSynth")
         self.page_layout = self.config.get("page_layout", "wide")
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
@@ -53,7 +58,7 @@ class InfoSynthApp:
         if not self.file_library:
             return
 
-        library, chunks, sources = Retriever.load_and_chunk_files(
+        _, chunks, sources = Retriever.load_and_chunk_files(
             self.file_library, self.library_path
         )
         self.retriever = Retriever(chunks, sources, max_results=5)
@@ -152,16 +157,17 @@ class InfoSynthApp:
                             else:
                                 self.retriever = None
 
-        if self.file_library:
-            with st.expander("📚 Document Library", expanded=False):
+        library_placeholder = st.empty()
+        with library_placeholder.container():
+            st.subheader("📚 Document Library")
+            if not self.file_library:
+                st.info("No documents available.")
+            else:
                 for file_name, meta in self.file_library.items():
+                    st.markdown(f"**{file_name}**")
                     st.markdown(
-                        f"**{file_name}**  ",
+                        f"🗂 {meta['size_kb']} KB | 📅 {meta['created_at'].split('T')[0]} | 📑 {meta.get('num_chunks', 0)} chunks"
                     )
-                    st.markdown(
-                        f"🗂 {meta['size_kb']} KB | 📅 {meta['created_at'].split('T')[0]} | 📑 {meta.get('num_chunks', 0)} chunks",
-                    )
-                    st.markdown("---")
 
         st.markdown("---")
         query = st.text_input("Enter your search query")
@@ -179,4 +185,12 @@ class InfoSynthApp:
 if __name__ == "__main__":
     mp.freeze_support()
     app = InfoSynthApp()
+
+    if not watcher_state.watcher_started:
+        threading.Thread(
+            target=start_watcher,
+            args=(app.watch_folders, app.library_path),
+            daemon=True,
+        ).start()
+        watcher_state.watcher_started = True
     app.run()

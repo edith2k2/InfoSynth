@@ -3,6 +3,7 @@ from typing import List, Tuple
 from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import streamlit as st
 import json
 import re
 import fitz

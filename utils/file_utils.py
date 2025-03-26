@@ -18,9 +18,17 @@ def process_uploaded_files(
 
     # Save uploaded files to destination_dir
     for uploaded_file in uploaded_files:
-        file_path = destination_dir / uploaded_file.name
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+        if hasattr(uploaded_file, "getbuffer"):
+            # Streamlit uploaded file
+            file_path = destination_dir / uploaded_file.name
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+        else:
+            # Directly passed from filesystem (e.g. watcher)
+            file_path = Path(uploaded_file)
+            if not file_path.exists():
+                continue  # Skip if file doesn't exist
+
         saved_files.append(file_path)
 
         # Register file into library so retriever sees it
@@ -50,17 +58,11 @@ def process_uploaded_files(
 def load_file_library(path: Path) -> Dict[str, dict]:
     """Load metadata from local JSON cache"""
     if not path.exists():
-        logger.info("No file library found. Creating new empty one.")
         path.write_text(json.dumps({}), encoding="utf-8")
         return {}
 
-    start_time = datetime.now()
     with open(path, "r") as f:
         library = json.load(f)
-        duration = (datetime.now() - start_time).total_seconds()
-        logger.info(
-            f"Loaded file library with {len(library)} document(s) in {duration:.2f} seconds."
-        )
         return library
 
 
