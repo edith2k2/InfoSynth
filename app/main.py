@@ -5,6 +5,41 @@ from pathlib import Path
 import os
 import sys
 import multiprocessing as mp
+import platform
+import shutil
+import pytesseract
+
+def configure_tesseract():
+    system_name = platform.system()
+
+    # Attempt to locate tesseract using shutil
+    tesseract_path = shutil.which("tesseract")
+    
+    if tesseract_path:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+        print(f"Tesseract found at: {tesseract_path}")
+    else:
+        if system_name == "Darwin":  # macOS
+            possible_paths = [
+                "/opt/homebrew/bin/tesseract",  # Apple Silicon
+                "/usr/local/bin/tesseract"      # Intel Mac
+            ]
+        elif system_name == "Linux":
+            possible_paths = [
+                "/usr/bin/tesseract",
+                "/usr/local/bin/tesseract"
+            ]
+        else:
+            print(f"Unsupported OS: {system_name}")
+            return
+
+        for path in possible_paths:
+            if Path(path).exists():
+                pytesseract.pytesseract.tesseract_cmd = path
+                print(f"Tesseract configured using: {path}")
+                return
+        
+        raise FileNotFoundError("Tesseract not found. Please install Tesseract or add it to your PATH.")
 
 from dotenv import load_dotenv
 
@@ -20,7 +55,6 @@ from utils import watcher_state
 from utils.file_watcher import start_watcher
 
 load_dotenv()
-
 
 class InfoSynthApp:
     def __init__(self, config: dict = None):
@@ -136,7 +170,7 @@ class InfoSynthApp:
                         "Upload Documents",
                         accept_multiple_files=True,
                         type=self.allowed_extensions,
-                        help="Upload .txt or .pdf or .docx or .json or .csv or .md or .html or .rtf documents for processing",
+                        help="Upload .txt or .pdf or .docx or .json or .csv or .md or .html or .rtf or .jpeg or .jpg or .png files for processing",
                     )
 
                     submit_button = st.form_submit_button("Process Documents")
@@ -185,6 +219,7 @@ class InfoSynthApp:
 if __name__ == "__main__":
     mp.freeze_support()
     app = InfoSynthApp()
+    configure_tesseract()
 
     if not watcher_state.watcher_started:
         threading.Thread(

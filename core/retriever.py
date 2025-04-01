@@ -12,6 +12,8 @@ import csv
 import markdown
 from bs4 import BeautifulSoup
 from striprtf.striprtf import rtf_to_text
+import pytesseract
+from PIL import Image
 
 from pathlib import Path
 
@@ -131,6 +133,10 @@ def read_text(file_path: Path) -> str:
             with open(file_path, "r", encoding="utf-8") as f:
                 rtf_content = f.read()
                 return rtf_to_text(rtf_content)
+        elif file_path.suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]:
+            # Perform OCR on image files
+            image = Image.open(file_path)
+            return pytesseract.image_to_string(image)
     except Exception as e:
         print(f"Failed to read file {file_path.name}: {e}")
     return ""
