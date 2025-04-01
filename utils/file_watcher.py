@@ -8,6 +8,7 @@ from utils.file_utils import (
     process_uploaded_files,
 )
 from utils.logger import AppLogger
+import streamlit as st
 
 logger = AppLogger("Watcher").get_logger()
 
@@ -19,7 +20,7 @@ class UploadFolderHandler(FileSystemEventHandler):
         self.library = load_file_library(library_path)
 
     def on_created(self, event):
-        if not event.is_directory and event.src_path.endswith((".pdf", ".txt")):
+        if not event.is_directory and event.src_path.endswith((".pdf", ".txt", ".docx", ".json", ".csv", ".md", ".html", ".rtf", ".jpg", ".jpeg", ".png", "bmp", ".tiff")):
             file_path = Path(event.src_path)
             logger.info(f"New downloaded file detected: {file_path.name}")
             try:
@@ -44,7 +45,7 @@ def start_watcher(watch_dirs: List[Path], library_path: Path):
         directory.mkdir(parents=True, exist_ok=True)
 
         existing_files = {meta["file_name"] for meta in library.values()}
-        all_files = list(directory.glob("*.pdf")) + list(directory.glob("*.txt"))
+        all_files = list(directory.glob("*.pdf")) + list(directory.glob("*.txt")) + list(directory.glob("*.docx")) + list(directory.glob("*.json")) + list(directory.glob("*.csv")) + list(directory.glob("*.md")) + list(directory.glob("*.html")) + list(directory.glob("*.rtf")) + list(directory.glob("*.jpg")) + list(directory.glob("*.jpeg")) + list(directory.glob("*.png")) + list(directory.glob("*.bmp")) + list(directory.glob("*.tiff"))
 
         new_files = [f for f in all_files if f.name not in existing_files]
 

@@ -20,17 +20,7 @@ source .venv/bin/activate   # macOS/Linux
 pip install -r requirements.txt
 ```
 
-#### Note: You will also need to install the Tesseract OCR engine on your local machine, which is needed for processing and extracting text from image files. The path to the installed binary is automatically configured in the code based on the architecture of your machine.
-
-If you are on MacOS:
-```sh
-brew install tesseract
-```
-
-OR if you are on Linux (Debian based distro):
-```sh
-sudo apt install tesseract-ocr
-```
+You will also need to install the tesseract OCR engine on your local machine, which is needed for processing and extracting text from image files.
 
 ### 3. Configure your environment
 

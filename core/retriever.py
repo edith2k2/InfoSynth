@@ -7,6 +7,13 @@ import streamlit as st
 import json
 import re
 import fitz
+import docx
+import csv
+import markdown
+from bs4 import BeautifulSoup
+from striprtf.striprtf import rtf_to_text
+import pytesseract
+from PIL import Image
 
 from pathlib import Path
 
@@ -99,6 +106,37 @@ def read_text(file_path: Path) -> str:
         elif file_path.suffix.lower() == ".pdf":
             with fitz.open(file_path) as doc:
                 return "\n".join([page.get_text() for page in doc])
+        elif file_path.suffix.lower() == ".docx":
+            doc = docx.Document(file_path)
+            return "\n".join([para.text for para in doc.paragraphs])
+        elif file_path.suffix.lower() == ".json":
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return json.dumps(data, indent=2)
+        elif file_path.suffix.lower() == ".csv":
+            with open(file_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                return "\n".join([", ".join(row) for row in reader])
+        elif file_path.suffix.lower() == ".md":
+            with open(file_path, "r", encoding="utf-8") as f:
+                md_content = f.read()
+                html_content = markdown.markdown(md_content)
+                # need to convert HTML to text using BeautifulSoup
+                soup = BeautifulSoup(html_content, "html.parser")
+                return soup.get_text()
+        elif file_path.suffix.lower() == ".html":
+            with open(file_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+                soup = BeautifulSoup(html_content, "html.parser")
+                return soup.get_text()
+        elif file_path.suffix.lower() == ".rtf":
+            with open(file_path, "r", encoding="utf-8") as f:
+                rtf_content = f.read()
+                return rtf_to_text(rtf_content)
+        elif file_path.suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]:
+            # Perform OCR on image files
+            image = Image.open(file_path)
+            return pytesseract.image_to_string(image)
     except Exception as e:
         print(f"Failed to read file {file_path.name}: {e}")
     return ""
