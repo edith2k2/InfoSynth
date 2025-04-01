@@ -7,6 +7,7 @@ import streamlit as st
 import json
 import re
 import fitz
+import docx
 
 from pathlib import Path
 
@@ -99,6 +100,9 @@ def read_text(file_path: Path) -> str:
         elif file_path.suffix.lower() == ".pdf":
             with fitz.open(file_path) as doc:
                 return "\n".join([page.get_text() for page in doc])
+        elif file_path.suffix.lower() == ".docx":
+            doc = docx.Document(file_path)
+            return "\n".join([para.text for para in doc.paragraphs])
     except Exception as e:
         print(f"Failed to read file {file_path.name}: {e}")
     return ""

@@ -136,7 +136,7 @@ class InfoSynthApp:
                         "Upload Documents",
                         accept_multiple_files=True,
                         type=self.allowed_extensions,
-                        help="Upload text or PDF documents for processing",
+                        help="Upload .txt or .pdf or .docx documents for processing",
                     )
 
                     submit_button = st.form_submit_button("Process Documents")

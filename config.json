@@ -1,7 +1,7 @@
 {
     "upload_dir": "data/uploads",
     "library_path": "data/library.json",
-    "allowed_extensions": ["txt", "pdf"],
+    "allowed_extensions": ["txt", "pdf", "docx"],
     "watch_folders": [
         "test/downloads"
     ],
