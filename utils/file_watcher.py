@@ -20,7 +20,7 @@ class UploadFolderHandler(FileSystemEventHandler):
         self.library = load_file_library(library_path)
 
     def on_created(self, event):
-        if not event.is_directory and event.src_path.endswith((".pdf", ".txt", ".docx", ".json", ".csv")):
+        if not event.is_directory and event.src_path.endswith((".pdf", ".txt", ".docx", ".json", ".csv", ".md", ".html", ".rtf")):
             file_path = Path(event.src_path)
             logger.info(f"New downloaded file detected: {file_path.name}")
             try:
@@ -45,7 +45,7 @@ def start_watcher(watch_dirs: List[Path], library_path: Path):
         directory.mkdir(parents=True, exist_ok=True)
 
         existing_files = {meta["file_name"] for meta in library.values()}
-        all_files = list(directory.glob("*.pdf")) + list(directory.glob("*.txt")) + list(directory.glob("*.docx")) + list(directory.glob("*.json")) + list(directory.glob("*.csv"))
+        all_files = list(directory.glob("*.pdf")) + list(directory.glob("*.txt")) + list(directory.glob("*.docx")) + list(directory.glob("*.json")) + list(directory.glob("*.csv")) + list(directory.glob("*.md")) + list(directory.glob("*.html")) + list(directory.glob("*.rtf"))
 
         new_files = [f for f in all_files if f.name not in existing_files]
 

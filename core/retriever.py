@@ -9,6 +9,9 @@ import re
 import fitz
 import docx
 import csv
+import markdown
+from bs4 import BeautifulSoup
+from striprtf.striprtf import rtf_to_text
 
 from pathlib import Path
 
@@ -112,6 +115,22 @@ def read_text(file_path: Path) -> str:
             with open(file_path, "r", encoding="utf-8") as f:
                 reader = csv.reader(f)
                 return "\n".join([", ".join(row) for row in reader])
+        elif file_path.suffix.lower() == ".md":
+            with open(file_path, "r", encoding="utf-8") as f:
+                md_content = f.read()
+                html_content = markdown.markdown(md_content)
+                # need to convert HTML to text using BeautifulSoup
+                soup = BeautifulSoup(html_content, "html.parser")
+                return soup.get_text()
+        elif file_path.suffix.lower() == ".html":
+            with open(file_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+                soup = BeautifulSoup(html_content, "html.parser")
+                return soup.get_text()
+        elif file_path.suffix.lower() == ".rtf":
+            with open(file_path, "r", encoding="utf-8") as f:
+                rtf_content = f.read()
+                return rtf_to_text(rtf_content)
     except Exception as e:
         print(f"Failed to read file {file_path.name}: {e}")
     return ""

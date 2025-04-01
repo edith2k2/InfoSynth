@@ -8,3 +8,6 @@ pymupdf
 colorama
 google-generativeai
 python-docx
+markdown
+bs4
+striprtf
