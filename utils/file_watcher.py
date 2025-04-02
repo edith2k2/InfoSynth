@@ -8,10 +8,9 @@ from utils.file_utils import (
     process_uploaded_files,
 )
 from utils.logger import AppLogger
-import streamlit as st
+from utils.watcher_state import watcher_state
 
 logger = AppLogger("Watcher").get_logger()
-
 
 class UploadFolderHandler(FileSystemEventHandler):
     def __init__(self, upload_dir: Path, library_path: Path):
@@ -28,9 +27,9 @@ class UploadFolderHandler(FileSystemEventHandler):
                 self.library, _, _ = process_uploaded_files(
                     [file_path], self.upload_dir, self.library, self.library_path
                 )
+                watcher_state.files_changed = True  # Signal change
             except Exception as e:
-                logger.error(f"Error : {e}")
-
+                logger.error(f"Error: {e}")
 
 def start_watcher(watch_dirs: List[Path], library_path: Path):
     if not watch_dirs:
@@ -45,7 +44,11 @@ def start_watcher(watch_dirs: List[Path], library_path: Path):
         directory.mkdir(parents=True, exist_ok=True)
 
         existing_files = {meta["file_name"] for meta in library.values()}
-        all_files = list(directory.glob("*.pdf")) + list(directory.glob("*.txt")) + list(directory.glob("*.docx")) + list(directory.glob("*.json")) + list(directory.glob("*.csv")) + list(directory.glob("*.md")) + list(directory.glob("*.html")) + list(directory.glob("*.rtf")) + list(directory.glob("*.jpg")) + list(directory.glob("*.jpeg")) + list(directory.glob("*.png")) + list(directory.glob("*.bmp")) + list(directory.glob("*.tiff"))
+        all_files = list(directory.glob("*.pdf")) + list(directory.glob("*.txt")) + list(directory.glob("*.docx")) + \
+                    list(directory.glob("*.json")) + list(directory.glob("*.csv")) + list(directory.glob("*.md")) + \
+                    list(directory.glob("*.html")) + list(directory.glob("*.rtf")) + list(directory.glob("*.jpg")) + \
+                    list(directory.glob("*.jpeg")) + list(directory.glob("*.png")) + list(directory.glob("*.bmp")) + \
+                    list(directory.glob("*.tiff"))
 
         new_files = [f for f in all_files if f.name not in existing_files]
 
@@ -53,7 +56,7 @@ def start_watcher(watch_dirs: List[Path], library_path: Path):
             library, _, _ = process_uploaded_files(
                 new_files, directory, library, library_path
             )
-            st.rerun()
+            watcher_state.files_changed = True  # Signal change
 
         event_handler = UploadFolderHandler(directory, library_path)
         observer.schedule(event_handler, path=str(directory), recursive=False)

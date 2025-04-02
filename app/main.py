@@ -51,7 +51,7 @@ from core.query_classifier import QueryClassifier
 from core.retriever import Retriever
 from core.llm import generate_answer
 from utils.file_utils import process_uploaded_files, load_file_library
-from utils import watcher_state
+from utils.watcher_state import watcher_state
 from utils.file_watcher import start_watcher
 
 load_dotenv()
@@ -191,17 +191,24 @@ class InfoSynthApp:
                             else:
                                 self.retriever = None
 
-        library_placeholder = st.empty()
-        with library_placeholder.container():
+        @st.fragment(run_every=5)
+        def refresh_library():
+            # Bypass instance state and directly read from source
+            current_library = load_file_library(self.library_path)
+
             st.subheader("📚 Document Library")
-            if not self.file_library:
+            if not current_library:
                 st.info("No documents available.")
             else:
-                for file_name, meta in self.file_library.items():
+                for file_name, meta in current_library.items():
                     st.markdown(f"**{file_name}**")
                     st.markdown(
-                        f"🗂 {meta['size_kb']} KB | 📅 {meta['created_at'].split('T')[0]} | 📑 {meta.get('num_chunks', 0)} chunks"
+                        f"🗂 {meta['size_kb']} KB | 📅 {meta['created_at'].split('T')[0]} "
+                        f"| 📑 {meta.get('num_chunks', 0)} chunks"
                     )
+
+        # Call the fragment
+        refresh_library()
 
         st.markdown("---")
         query = st.text_input("Enter your search query")
