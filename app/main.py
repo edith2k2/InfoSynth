@@ -9,12 +9,13 @@ import platform
 import shutil
 import pytesseract
 
+
 def configure_tesseract():
     system_name = platform.system()
 
     # Attempt to locate tesseract using shutil
     tesseract_path = shutil.which("tesseract")
-    
+
     if tesseract_path:
         pytesseract.pytesseract.tesseract_cmd = tesseract_path
         print(f"Tesseract found at: {tesseract_path}")
@@ -22,13 +23,10 @@ def configure_tesseract():
         if system_name == "Darwin":  # macOS
             possible_paths = [
                 "/opt/homebrew/bin/tesseract",  # Apple Silicon
-                "/usr/local/bin/tesseract"      # Intel Mac
+                "/usr/local/bin/tesseract",  # Intel Mac
             ]
         elif system_name == "Linux":
-            possible_paths = [
-                "/usr/bin/tesseract",
-                "/usr/local/bin/tesseract"
-            ]
+            possible_paths = ["/usr/bin/tesseract", "/usr/local/bin/tesseract"]
         else:
             print(f"Unsupported OS: {system_name}")
             return
@@ -38,8 +36,11 @@ def configure_tesseract():
                 pytesseract.pytesseract.tesseract_cmd = path
                 print(f"Tesseract configured using: {path}")
                 return
-        
-        raise FileNotFoundError("Tesseract not found. Please install Tesseract or add it to your PATH.")
+
+        raise FileNotFoundError(
+            "Tesseract not found. Please install Tesseract or add it to your PATH."
+        )
+
 
 from dotenv import load_dotenv
 
@@ -55,6 +56,7 @@ from utils.watcher_state import watcher_state
 from utils.file_watcher import start_watcher
 
 load_dotenv()
+
 
 class InfoSynthApp:
     def __init__(self, config: dict = None):
@@ -97,44 +99,30 @@ class InfoSynthApp:
         )
         self.retriever = Retriever(chunks, sources, max_results=5)
 
-    def handle_query(self, query: str):
+    def handle_query(self, query: str, retriever=None):
         """Handle search queries with basic classification."""
         analysis = self.classifier.analyze_query(query)
+        retriever = retriever or self.retriever
 
-        st.markdown(f"🔍 **Query:** {analysis.corrected_query}")
-        st.markdown(f"🧠 **Detected Intent:** `{analysis.query_type.value}`")
-        st.markdown(f"📊 **Confidence:** {analysis.confidence:.2f}")
-        if analysis.corrections:
-            st.markdown("✏️ **Corrections:**")
-            for orig, corr in analysis.corrections.items():
-                st.markdown(f"- `{orig}` → `{corr}`")
+        st.session_state.analysis = analysis
+        st.session_state.answer = None
+        st.session_state.results = []
 
-        if self.retriever:
-            st.markdown("---")
-            st.subheader("🔎 Top Retrieved Chunks")
-
-            results = self.retriever.search(analysis.corrected_query)
+        if retriever:
+            results = retriever.search(analysis.corrected_query)
 
             if results:
                 with st.spinner("Generating answer with Gemini..."):
                     top_chunks = [r[0] for r in results]
                     sources = [r[1] for r in results]
-
                     answer = generate_answer(query, top_chunks)
 
-                    st.markdown("### 💬 Answer")
-                    st.success(answer)
+                    st.session_state.answer = answer
+                    st.session_state.results = results
+            else:
+                st.info("No results found for your query.")
 
-                    st.markdown("### 📂 Sources")
-                    for i, src in enumerate(sources):
-                        st.markdown(f"**{i+1}.** `{src}`")
-
-                st.markdown("---")
-                for chunk, source, score in results:
-                    st.markdown(f"📄 **Source:** `{source}`")
-                    st.markdown(f"🧩 **Score:** {score:.4f}")
-                    st.markdown(f"> {chunk[:300]}...")
-                    st.markdown("---")
+        st.session_state.query_input = ""
 
     def render_ui(self):
         """Render the main user interface"""
@@ -210,13 +198,63 @@ class InfoSynthApp:
         # Call the fragment
         refresh_library()
 
-        st.markdown("---")
-        query = st.text_input("Enter your search query")
-        if st.button("Search"):
-            if not query.strip():
-                st.warning("Please enter a query.")
-            else:
-                self.handle_query(query)
+        @st.fragment(run_every=5)
+        def search_ui():
+            st.markdown("---")
+
+            current_library = load_file_library(self.library_path)
+            _, chunks, sources = Retriever.load_and_chunk_files(
+                current_library, self.library_path
+            )
+            retriever = Retriever(chunks, sources, max_results=5) if chunks else None
+
+            if "query_input" not in st.session_state:
+                st.session_state.query_input = ""
+
+            query = st.text_input(
+                "Enter your search query",
+                value=st.session_state.query_input,
+                key="search_input",
+            )
+            st.session_state.query_input = query
+
+            if st.button("Search", key="search_button"):
+                if not query.strip():
+                    st.warning("Please enter a query.")
+                else:
+                    self.handle_query(query, retriever=retriever)
+
+            analysis = st.session_state.get("analysis")
+            answer = st.session_state.get("answer")
+            results = st.session_state.get("results", [])
+
+            if analysis:
+                st.markdown(f"🔍 **Query:** {analysis.corrected_query}")
+                st.markdown(f"🧠 **Detected Intent:** `{analysis.query_type.value}`")
+                st.markdown(f"📊 **Confidence:** {analysis.confidence:.2f}")
+                if analysis.corrections:
+                    st.markdown("✏️ **Corrections:**")
+                    for orig, corr in analysis.corrections.items():
+                        st.markdown(f"- `{orig}` → `{corr}`")
+
+            if answer:
+                st.markdown("### 💬 Answer")
+                st.success(answer)
+
+                st.markdown("### 📂 Sources")
+                for i, (_, src, _) in enumerate(results):
+                    st.markdown(f"**{i+1}.** `{src}`")
+
+                st.markdown("---")
+                for chunk, source, score in results:
+                    st.markdown(f"📄 **Source:** `{source}`")
+                    st.markdown(f"🧩 **Score:** {score:.4f}")
+                    st.markdown(f"> {chunk[:300]}...")
+                    st.markdown("---")
+            elif retriever is None:
+                st.info("📂 Please upload and process documents before querying.")
+
+        search_ui()
 
     def run(self):
         """Main application entry point"""

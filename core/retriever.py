@@ -26,9 +26,12 @@ class Retriever:
     ):
         self.documents = documents
         self.doc_paths = doc_paths
-        self.vectorizer = TfidfVectorizer(stop_words="english")
-        self.doc_vectors = self.vectorizer.fit_transform(documents)
+        self.vectorizer = None
+        self.doc_vectors = None
         self.max_results = max_results
+        if self.documents:
+            self.vectorizer = TfidfVectorizer(stop_words="english")
+            self.doc_vectors = self.vectorizer.fit_transform(self.documents)
 
     def search(self, query: str) -> List[Tuple[str, str, float]]:
         """
