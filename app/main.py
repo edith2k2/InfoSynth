@@ -58,6 +58,18 @@ from utils.file_watcher import start_watcher
 load_dotenv()
 
 
+def apply_external_styles():
+    st.markdown(
+        """
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    """,
+        unsafe_allow_html=True,
+    )
+    style_path = Path(__file__).parent / "styles" / "styles.css"
+    with open(style_path) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+
 class InfoSynthApp:
     def __init__(self, config: dict = None):
         self.config = config or self.load_config("config.json")
@@ -88,6 +100,15 @@ class InfoSynthApp:
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.library_path.parent.mkdir(parents=True, exist_ok=True)
         st.set_page_config(page_title=self.page_title, layout=self.page_layout)
+        self.icons = {
+            ".pdf": '<i class="fas fa-file-pdf" style="color: #e74c3c;"></i>',
+            ".docx": '<i class="fas fa-file-word" style="color: #2980b9;"></i>',
+            ".csv": '<i class="fas fa-file-csv" style="color: #27ae60;"></i>',
+            ".jpg": '<i class="fas fa-file-image" style="color: #8e44ad;"></i>',
+            ".png": '<i class="fas fa-file-image" style="color: #8e44ad;"></i>',
+            ".json": '<i class="fas fa-file-code" style="color: #f39c12;"></i>',
+            ".txt": '<i class="fas fa-file-alt" style="color: #34495e;"></i>',
+        }
 
         self.file_library = load_file_library(self.library_path)
 
@@ -126,103 +147,92 @@ class InfoSynthApp:
 
     def render_ui(self):
         """Render the main user interface"""
-        st.title("Document Search Engine")
+        apply_external_styles()
 
-        with st.sidebar:
-            st.header("Configuration")
+        st.title("InfoSynth")
 
-            with st.expander("🕒 Time Range", expanded=False):
-                st.markdown("Temporal controls placeholder")
+        left_col, spacer, right_col = st.columns([13, 0.5, 7])
 
-            with st.expander("⚙️ Search Configuration", expanded=False):
-                st.number_input(
-                    "Maximum chain of thought search steps",
-                    min_value=0,
-                    max_value=5,
-                    value=1,
-                    key="steps_input",
-                    help="Set the maximum number iterations for chain of thought search",
+        # LEFT
+        with left_col:
+            st.markdown("### Recent Documents")
+
+            recent_files = []
+            if self.file_library:
+                sorted_files = sorted(
+                    self.file_library.items(),
+                    key=lambda x: x[1].get("created_at", ""),
+                    reverse=True,
                 )
-                top_k = st.number_input(
-                    "Number of results to retrieve (top-k)",
-                    min_value=1,
-                    max_value=20,
-                    value=5,
-                    step=1,
-                    help="Set the number of top results to retrieve from search",
-                )
+                recent_files = sorted_files[:4]
 
-            with st.expander("📁 Document Upload", expanded=True):
-                with st.form("document_upload_form"):
-                    uploaded_files = st.file_uploader(
-                        "Upload Documents",
-                        accept_multiple_files=True,
-                        type=self.allowed_extensions,
-                        help="Upload .txt or .pdf or .docx or .json or .csv or .md or .html or .rtf or .jpeg or .jpg or .png files for processing",
+            cols = st.columns(5)
+
+            for i, (file_name, meta) in enumerate(recent_files):
+                file_ext = Path(file_name).suffix.lower()
+
+                with cols[i]:
+                    icon_html = self.icons.get(
+                        file_ext, '<i class="fas fa-file" style="color: #7f8c8d;"></i>'
                     )
-
-                    submit_button = st.form_submit_button("Process Documents")
-
-                    if submit_button and uploaded_files:
-                        with st.spinner("Processing documents..."):
-                            self.file_library, chunks, sources = process_uploaded_files(
-                                uploaded_files,
-                                self.upload_dir,
-                                self.file_library,
-                                self.library_path,
-                            )
-
-                            if chunks:
-                                self.retriever = Retriever(
-                                    chunks, sources, max_results=5
-                                )
-                            else:
-                                self.retriever = None
-
-        @st.fragment(run_every=5)
-        def refresh_library():
-            # Bypass instance state and directly read from source
-            current_library = load_file_library(self.library_path)
-
-            st.subheader("📚 Document Library")
-            if not current_library:
-                st.info("No documents available.")
-            else:
-                for file_name, meta in current_library.items():
-                    st.markdown(f"**{file_name}**")
                     st.markdown(
-                        f"🗂 {meta['size_kb']} KB | 📅 {meta['created_at'].split('T')[0]} "
-                        f"| 📑 {meta.get('num_chunks', 0)} chunks"
+                        f"""
+                        <div class="doc-card">
+                            <div class="doc-icon">
+                                {icon_html}
+                            </div>
+                            <div class="doc-name" title="{file_name}">
+                                {file_name}
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
 
-        # Call the fragment
-        refresh_library()
-
-        @st.fragment(run_every=5)
-        def search_ui():
+            with cols[4]:
+                st.markdown(
+                    """
+                    <a href="#configuration" class="doc-upload">
+                        <span style="font-size: 2.5rem;">➕</span>
+                    </a>
+                    """,
+                    unsafe_allow_html=True,
+                )
             st.markdown("---")
 
-            current_library = load_file_library(self.library_path)
-            _, chunks, sources = Retriever.load_and_chunk_files(
-                current_library, self.library_path
-            )
-            retriever = Retriever(chunks, sources, max_results=5) if chunks else None
+            @st.fragment(run_every=5)
+            def refresh_library():
+                # Bypass instance state and directly read from source
+                current_library = load_file_library(self.library_path)
 
-            if "query_input" not in st.session_state:
-                st.session_state.query_input = ""
+                st.subheader("📚 Document Library")
+                if not current_library:
+                    st.info("No documents available.")
+                else:
+                    for file_name, meta in current_library.items():
+                        st.markdown(f"**{file_name}**")
+                        st.markdown(
+                            f"🗂 {meta['size_kb']} KB | 📅 {meta['created_at'].split('T')[0]} "
+                            f"| 📑 {meta.get('num_chunks', 0)} chunks"
+                        )
 
+            # Call the fragment
+            refresh_library()
+
+        # RIGHT
+        with right_col:
             query = st.text_input(
                 "Enter your search query",
-                value=st.session_state.query_input,
+                value=st.session_state.get("query_input", ""),
                 key="search_input",
             )
             st.session_state.query_input = query
 
-            if st.button("Search", key="search_button"):
+            if st.button("Search", key="search_button_top"):
                 if not query.strip():
                     st.warning("Please enter a query.")
                 else:
-                    self.handle_query(query, retriever=retriever)
+                    self.handle_query(query)
 
             analysis = st.session_state.get("analysis")
             answer = st.session_state.get("answer")
@@ -230,7 +240,7 @@ class InfoSynthApp:
 
             if analysis:
                 st.markdown(f"🔍 **Query:** {analysis.corrected_query}")
-                st.markdown(f"🧠 **Detected Intent:** `{analysis.query_type.value}`")
+                st.markdown(f"🧠 **Intent:** `{analysis.query_type.value}`")
                 st.markdown(f"📊 **Confidence:** {analysis.confidence:.2f}")
                 if analysis.corrections:
                     st.markdown("✏️ **Corrections:**")
@@ -251,10 +261,51 @@ class InfoSynthApp:
                     st.markdown(f"🧩 **Score:** {score:.4f}")
                     st.markdown(f"> {chunk[:300]}...")
                     st.markdown("---")
-            elif retriever is None:
-                st.info("📂 Please upload and process documents before querying.")
+        # Sidebar
+        with st.sidebar:
+            st.header("Configuration")
 
-        search_ui()
+            with st.expander("🕒 Time Range", expanded=False):
+                st.markdown("Temporal controls placeholder")
+
+            with st.expander("⚙️ Search Configuration", expanded=False):
+                st.number_input(
+                    "Maximum chain of thought search steps",
+                    min_value=0,
+                    max_value=5,
+                    value=1,
+                    key="steps_input",
+                )
+                st.number_input(
+                    "Number of results to retrieve (top-k)",
+                    min_value=1,
+                    max_value=20,
+                    value=5,
+                    step=1,
+                    key="top_k_input",
+                )
+
+            with st.expander("📁 Document Upload", expanded=True):
+                with st.form("document_upload_form"):
+                    uploaded_files = st.file_uploader(
+                        "Upload Documents",
+                        accept_multiple_files=True,
+                        type=self.allowed_extensions,
+                    )
+                    submit_button = st.form_submit_button("Process Documents")
+                    if submit_button and uploaded_files:
+                        with st.spinner("Processing documents..."):
+                            self.file_library, chunks, sources = process_uploaded_files(
+                                uploaded_files,
+                                self.upload_dir,
+                                self.file_library,
+                                self.library_path,
+                            )
+                            self.retriever = (
+                                Retriever(chunks, sources, max_results=5)
+                                if chunks
+                                else None
+                            )
 
     def run(self):
         """Main application entry point"""
