@@ -190,14 +190,28 @@ class InfoSynthApp:
                     )
 
             with cols[4]:
-                st.markdown(
-                    """
-                    <a href="#configuration" class="doc-upload">
-                        <span style="font-size: 2.5rem;">➕</span>
-                    </a>
-                    """,
-                    unsafe_allow_html=True,
+                uploaded_files = st.file_uploader(
+                    label="Upload new documents",
+                    type=["pdf", "png"],
+                    accept_multiple_files=True,
+                    key="styled_uploader",
+                    label_visibility="hidden",
                 )
+
+                if uploaded_files:
+                    with st.spinner("Processing documents..."):
+                        self.file_library, chunks, sources = process_uploaded_files(
+                            uploaded_files,
+                            self.upload_dir,
+                            self.file_library,
+                            self.library_path,
+                        )
+                        self.retriever = (
+                            Retriever(chunks, sources, max_results=5)
+                            if chunks
+                            else None
+                        )
+
             st.markdown("---")
 
             @st.fragment(run_every=5)
@@ -284,28 +298,6 @@ class InfoSynthApp:
                     step=1,
                     key="top_k_input",
                 )
-
-            with st.expander("📁 Document Upload", expanded=True):
-                with st.form("document_upload_form"):
-                    uploaded_files = st.file_uploader(
-                        "Upload Documents",
-                        accept_multiple_files=True,
-                        type=self.allowed_extensions,
-                    )
-                    submit_button = st.form_submit_button("Process Documents")
-                    if submit_button and uploaded_files:
-                        with st.spinner("Processing documents..."):
-                            self.file_library, chunks, sources = process_uploaded_files(
-                                uploaded_files,
-                                self.upload_dir,
-                                self.file_library,
-                                self.library_path,
-                            )
-                            self.retriever = (
-                                Retriever(chunks, sources, max_results=5)
-                                if chunks
-                                else None
-                            )
 
     def run(self):
         """Main application entry point"""
