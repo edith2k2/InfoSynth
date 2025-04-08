@@ -154,7 +154,8 @@ class InfoSynthApp:
         left_col, spacer, right_col = st.columns([13, 0.5, 7])
 
         # LEFT
-        with left_col:
+        @st.fragment(run_every=5)
+        def show_recent_documents():
             st.markdown("### Recent Documents")
 
             recent_files = []
@@ -168,9 +169,8 @@ class InfoSynthApp:
 
             cols = st.columns(5)
 
-            for i, (file_name, meta) in enumerate(recent_files):
+            for i, (file_name, meta) in enumerate(recent_files[:4]):
                 file_ext = Path(file_name).suffix.lower()
-
                 with cols[i]:
                     icon_html = self.icons.get(
                         file_ext, '<i class="fas fa-file" style="color: #7f8c8d;"></i>'
@@ -189,10 +189,11 @@ class InfoSynthApp:
                         unsafe_allow_html=True,
                     )
 
+            # Upload tile (last column)
             with cols[4]:
                 uploaded_files = st.file_uploader(
                     label="Upload new documents",
-                    type=["pdf", "png"],
+                    type=self.allowed_extensions,
                     accept_multiple_files=True,
                     key="styled_uploader",
                     label_visibility="hidden",
@@ -212,25 +213,52 @@ class InfoSynthApp:
                             else None
                         )
 
-            st.markdown("---")
+                        uploaded_files = []
+
+        with left_col:
 
             @st.fragment(run_every=5)
             def refresh_library():
-                # Bypass instance state and directly read from source
                 current_library = load_file_library(self.library_path)
-
                 st.subheader("📚 Document Library")
+
                 if not current_library:
                     st.info("No documents available.")
-                else:
-                    for file_name, meta in current_library.items():
-                        st.markdown(f"**{file_name}**")
-                        st.markdown(
-                            f"🗂 {meta['size_kb']} KB | 📅 {meta['created_at'].split('T')[0]} "
-                            f"| 📑 {meta.get('num_chunks', 0)} chunks"
-                        )
+                    return
+
+                # Scroll container
+                st.markdown(
+                    """
+                    <div style='
+                        max-height: 250px;
+                        overflow-y: auto;
+                        padding-right: 1rem;
+                        margin-top: 0.5rem;
+                    '>
+                """,
+                    unsafe_allow_html=True,
+                )
+
+                # Render each file
+                for file_name, meta in current_library.items():
+                    st.markdown(
+                        f"""
+                        <div style='margin-bottom: 0.75rem;'>
+                            <strong>{file_name}</strong><br>
+                            📦 {meta['size_kb']} KB |
+                            📅 {meta['created_at'].split('T')[0]} |
+                            📑 {meta.get('num_chunks', 0)} chunks
+                            <hr style='margin-top: 0.4rem; margin-bottom: 0.4rem; border-top: 1px solid #333;'>
+                        </div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown("</div>", unsafe_allow_html=True)
 
             # Call the fragment
+            show_recent_documents()
+            st.markdown("---")
             refresh_library()
 
         # RIGHT
