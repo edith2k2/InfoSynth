@@ -41,14 +41,6 @@ def process_uploaded_files(
             "modified_at": datetime.fromtimestamp(file_info.st_mtime).isoformat(),
         }
 
-        file_info = file_path.stat()
-        st.success(f"✅ Uploaded: {uploaded_file.name}")
-        st.markdown(f"- **Size:** {file_info.st_size / 1024:.2f} KB")
-        st.markdown(
-            f"- **Uploaded At:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-        st.markdown("---")
-
     # Chunk and update library with chunks/num_chunks
     library, chunks, sources = Retriever.load_and_chunk_files(library, library_path)
 

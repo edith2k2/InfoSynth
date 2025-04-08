@@ -29,12 +29,17 @@ class Retriever:
     ):
         self.documents = documents
         self.doc_paths = doc_paths
-        self.vectorizer = TfidfVectorizer(stop_words="english")
-        self.doc_vectors = self.vectorizer.fit_transform(documents)
-        # BM25
-        self.tokenized_docs = [self._tokenize_text(doc) for doc in documents]
-        self.bm25_index = BM25Okapi(self.tokenized_docs)
+        self.vectorizer = None
+        self.doc_vectors = None
         self.max_results = max_results
+        if self.documents:
+            self.vectorizer = TfidfVectorizer(stop_words="english")
+            self.doc_vectors = self.vectorizer.fit_transform(self.documents)
+        
+            # BM25
+            self.tokenized_docs = [self._tokenize_text(doc) for doc in documents]
+            self.bm25_index = BM25Okapi(self.tokenized_docs)
+        
         # Query Classifier
         self.query_classifier = QueryClassifier()
 
