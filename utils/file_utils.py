@@ -10,6 +10,14 @@ from utils.logger import AppLogger
 logger = AppLogger(name="FileUtils").get_logger()
 
 
+def show_status_message(message, type="info"):
+    css_class = f"status-message status-{type}"
+    st.markdown(
+        f'<div class="{css_class}">{message}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def process_uploaded_files(
     uploaded_files, destination_dir: Path, library: dict, library_path: Path
 ):
@@ -40,6 +48,8 @@ def process_uploaded_files(
             "created_at": datetime.fromtimestamp(file_info.st_ctime).isoformat(),
             "modified_at": datetime.fromtimestamp(file_info.st_mtime).isoformat(),
         }
+
+        show_status_message(f"{len(saved_files)} new file(s) uploaded.", type="success")
 
     # Chunk and update library with chunks/num_chunks
     library, chunks, sources = Retriever.load_and_chunk_files(library, library_path)

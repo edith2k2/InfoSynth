@@ -156,6 +156,7 @@ class InfoSynthApp:
         # LEFT
         @st.fragment(run_every=5)
         def show_recent_documents():
+            self.file_library = load_file_library(self.library_path)
             st.markdown("### Recent Documents")
 
             recent_files = []
@@ -200,9 +201,13 @@ class InfoSynthApp:
                 )
 
                 if uploaded_files:
-                    with st.spinner("Processing documents..."):
+                    new_files = [
+                        f for f in uploaded_files if f.name not in self.file_library
+                    ]
+
+                    if new_files:
                         self.file_library, chunks, sources = process_uploaded_files(
-                            uploaded_files,
+                            new_files,
                             self.upload_dir,
                             self.file_library,
                             self.library_path,
@@ -212,8 +217,6 @@ class InfoSynthApp:
                             if chunks
                             else None
                         )
-
-                        uploaded_files = []
 
         with left_col:
 
