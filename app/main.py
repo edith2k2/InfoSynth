@@ -298,7 +298,7 @@ class InfoSynthApp:
                     st.markdown(f"**{i+1}.** `{src}`")
 
                 st.markdown("---")
-                for chunk, source, score in results:
+                for chunk, source, score, additional in results:
                     st.markdown(f"📄 **Source:** `{source}`")
                     st.markdown(f"🧩 **Score:** {score:.4f}")
                     st.markdown(f"> {chunk[:300]}...")

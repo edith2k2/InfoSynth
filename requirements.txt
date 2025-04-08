@@ -13,3 +13,5 @@ bs4
 striprtf
 pytesseract
 pillow
+rank_bm25
+numpy
