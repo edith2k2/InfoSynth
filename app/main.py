@@ -294,17 +294,19 @@ class InfoSynthApp:
 
             if answer:
                 st.markdown("### 💬 Answer")
-                st.success(answer)
+                st.success(answer) # this is the LLM's answer
 
-                st.markdown("### 📂 Sources")
-                for i, (_, src, _) in enumerate(results):
-                    st.markdown(f"**{i+1}.** `{src}`")
+                st.markdown("### 📂 Sources and their scores")
+                # # NOTE: results is a list of tuples (almost always 5 elements long, iirc). The first element of the tuple is the chunk, the second is the filepath, 
+                # # the third is the combined score, and the fourth is a dict containing combined_score, tfidf_score, and bm25_score. 
+                # for i, (src, _, _, _) in enumerate(results): # NOTE: do not need this code as the codeblock below this already achieves this
+                #     st.markdown(f"**{i+1}.** `{src}`")
 
-                st.markdown("---")
-                for chunk, source, score, additional in results:
-                    st.markdown(f"📄 **Source:** `{source}`")
+                # st.markdown("---")
+                for i, (chunk, source, score, additional) in enumerate(results): # these are BM25 results
+                    st.markdown(f"**{i+1}.** 📄 **Source:** `{source}`")
                     st.markdown(f"🧩 **Score:** {score:.4f}")
-                    st.markdown(f"> {chunk[:300]}...")
+                    st.markdown(f"> {chunk[:300]}...") # TODO: do we want to allow the user to see the whole chunk? Can implement an on-demand dropdown if needed on the UI
                     st.markdown("---")
         # Sidebar
         with st.sidebar:
