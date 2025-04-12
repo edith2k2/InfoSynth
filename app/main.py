@@ -135,7 +135,8 @@ class InfoSynthApp:
                 with st.spinner("Generating answer with Gemini..."):
                     top_chunks = [r[0] for r in results]
                     sources = [r[1] for r in results]
-                    answer = generate_answer(query, top_chunks)
+                    scores = [r[2] for r in results]
+                    answer = generate_answer(query, top_chunks, scores)
 
                     st.session_state.answer = answer
                     st.session_state.results = results

@@ -57,7 +57,7 @@ class Retriever:
     def search(self, query: str) -> List[Tuple[str, str, float]]:
         """
         Perform hybrid search using both TF-IDF and BM25
-        Returns: List of (document snippet, source path, score)
+        Returns: List of (document snippet, source path, score, additional scores information)
         """
         # Classify query to determine optimal weights
         query_analysis = self.query_classifier.analyze_query(query)
