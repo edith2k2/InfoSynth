@@ -8,6 +8,20 @@ import multiprocessing as mp
 import platform
 import shutil
 import pytesseract
+from dotenv import load_dotenv
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
+
+from core.query_classifier import QueryClassifier
+from core.retriever import Retriever
+from core.llm import generate_answer
+from utils.file_utils import process_uploaded_files, load_file_library
+from utils.watcher_state import watcher_state
+from utils.file_watcher import start_watcher
+
+load_dotenv()
 
 
 def configure_tesseract():
@@ -40,22 +54,6 @@ def configure_tesseract():
         raise FileNotFoundError(
             "Tesseract not found. Please install Tesseract or add it to your PATH."
         )
-
-
-from dotenv import load_dotenv
-
-ROOT_DIR = Path(__file__).resolve().parent.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.append(str(ROOT_DIR))
-
-from core.query_classifier import QueryClassifier
-from core.retriever import Retriever
-from core.llm import generate_answer
-from utils.file_utils import process_uploaded_files, load_file_library
-from utils.watcher_state import watcher_state
-from utils.file_watcher import start_watcher
-
-load_dotenv()
 
 
 def apply_external_styles():
@@ -100,7 +98,7 @@ class InfoSynthApp:
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.library_path.parent.mkdir(parents=True, exist_ok=True)
         st.set_page_config(page_title=self.page_title, layout=self.page_layout)
-        self.icons = {
+        self.icons = { # TODO: add icons for the other file types that we support
             ".pdf": '<i class="fas fa-file-pdf" style="color: #e74c3c;"></i>',
             ".docx": '<i class="fas fa-file-word" style="color: #2980b9;"></i>',
             ".csv": '<i class="fas fa-file-csv" style="color: #27ae60;"></i>',
@@ -118,7 +116,8 @@ class InfoSynthApp:
         _, chunks, sources = Retriever.load_and_chunk_files(
             self.file_library, self.library_path
         )
-        self.retriever = Retriever(chunks, sources, max_results=5)
+        self.retriever = Retriever(chunks, sources, max_results=watcher_state.max_results)
+
 
     def handle_query(self, query: str, retriever=None):
         """Handle search queries with basic classification."""
@@ -212,11 +211,13 @@ class InfoSynthApp:
                             self.file_library,
                             self.library_path,
                         )
-                        self.retriever = (
-                            Retriever(chunks, sources, max_results=5)
+                        self.retriever = ( # TODO: understand why the self.retriever variable is being reassigned here (ask Johnny).
+                            # from my understanding, this is a check to see if BM25 finds any results for the query 
+                            Retriever(chunks, sources, max_results=watcher_state.max_results)
                             if chunks
                             else None
                         )
+
 
         with left_col:
 
@@ -296,13 +297,14 @@ class InfoSynthApp:
                 st.markdown("### 💬 Answer")
                 st.success(answer) # this is the LLM's answer
 
-                st.markdown("### 📂 Sources and their scores")
-                # # NOTE: results is a list of tuples (almost always 5 elements long, iirc). The first element of the tuple is the chunk, the second is the filepath, 
-                # # the third is the combined score, and the fourth is a dict containing combined_score, tfidf_score, and bm25_score. 
-                # for i, (src, _, _, _) in enumerate(results): # NOTE: do not need this code as the codeblock below this already achieves this
-                #     st.markdown(f"**{i+1}.** `{src}`")
+                st.markdown("### 📂 Sources for LLM's answer")
+                # NOTE: results is a list of tuples (e.g., its length is 5 when k for topk = 5). The first element of the tuple is the chunk, the second is the filepath, 
+                # the third is the combined score, and the fourth is a dict containing combined_score, tfidf_score, and bm25_score. 
+                for i, (_, path, _, _) in enumerate(results): # TODO: Is this what we want to display here?
+                    st.markdown(f"**{i+1}.** `{path}`")
 
-                # st.markdown("---")
+                st.markdown("---")
+                st.markdown("### BM25 Results")
                 for i, (chunk, source, score, additional) in enumerate(results): # these are BM25 results
                     st.markdown(f"**{i+1}.** 📄 **Source:** `{source}`")
                     st.markdown(f"🧩 **Score:** {score:.4f}")
@@ -316,21 +318,26 @@ class InfoSynthApp:
                 st.markdown("Temporal controls placeholder")
 
             with st.expander("⚙️ Search Configuration", expanded=False):
-                st.number_input(
+                # TODO: figure out how to use this user input to do something meaningful (i.e., if we do not already)
+                # TODO: is the `key` field in these input elements supposed to help us with something?
+                watcher_state.max_chain_of_thought_search_steps = int(st.number_input(
                     "Maximum chain of thought search steps",
                     min_value=0,
                     max_value=5,
                     value=1,
                     key="steps_input",
-                )
-                st.number_input(
+                ))
+
+                watcher_state.max_results = int(st.number_input(
                     "Number of results to retrieve (top-k)",
                     min_value=1,
-                    max_value=20,
-                    value=5,
+                    max_value=20, # this is the max number of results we want the user to be able to set because 20 is already too many
+                    value=5, # default value that the input element will show for k
                     step=1,
+                    # on_change=self.render_ui(),
                     key="top_k_input",
-                )
+                ))
+                
 
     def run(self):
         """Main application entry point"""
