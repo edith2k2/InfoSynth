@@ -195,6 +195,14 @@ class InfoSynthApp:
 
     def handle_query(self, query: str, retriever=None):
         """Handle search queries with basic classification."""
+        # Check number of documents
+        if not self.file_library:
+            show_status_message(
+                "No documents available. Please upload documents to the library.",
+                "error",
+            )
+            return
+
         analysis = self.classifier.analyze_query(query)
         retriever = retriever or self.retriever
 

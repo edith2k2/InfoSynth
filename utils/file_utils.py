@@ -83,20 +83,22 @@ def load_and_chunk_files(
     all_sources = []
     updated = False
     new_library = copy.deepcopy(library)
+    missing_files = set()
 
     def process_file(file_name: str):
         file_meta = library[file_name]
         file_path = Path(file_meta["file_path"])
 
-        # Check if the file exists
+        # Check if the file exists, if not, remove from library
         if not file_path.exists():
+            logger.warning(f"File {file_name} does not exist. Marking for deletion.")
+            missing_files.add(file_name)
             return None
 
         file_info = file_path.stat()
         current_mtime = file_info.st_mtime
         created_time = file_info.st_ctime
         cached_mtime = file_meta.get("last_modified", 0)
-
         # Check if the file has been modified since last chunking or newly added
         needs_chunking = "chunks" not in file_meta or not isclose(
             cached_mtime, current_mtime, abs_tol=1e-6
@@ -135,6 +137,10 @@ def load_and_chunk_files(
 
             if was_updated:
                 updated = True
+
+    for missing in missing_files:
+        new_library.pop(missing, None)
+        updated = True
 
     if updated:
         with open(file_library_path, "w") as f:
