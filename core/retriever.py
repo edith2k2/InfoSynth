@@ -3,6 +3,7 @@ from typing import List, Tuple
 from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from collections import defaultdict
 import streamlit as st
 import json
 import re
@@ -22,6 +23,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 from core.query_classifier import QueryClassifier, QueryType
+from llm import llm_query_expansion
 
 class Retriever:
     def __init__(
@@ -109,6 +111,31 @@ class Retriever:
             )
             
         return results
+    
+    def query_expansion(self, query: str, num_k: int = 5) -> List[str]:
+        """
+        Perform query expansion with the help of LLM
+        Returns: List of expanded queries
+        """
+        print("query", query, "num", num_k)
+        expanded_queries = []
+        for _ in range(num_k):
+            expanded_query = llm_query_expansion(query, expanded_queries)
+            expanded_queries.append(expanded_query)
+        # print(expanded_queries)
+        return expanded_queries
+
+    def expanded_search(self, query: str) -> List[Tuple[str, str, float]]:
+        """
+        Perform search with query expansion
+        Returns: List of (document snippet, source path, score)
+        """
+        expanded_queries = [query] + self.query_expansion(query)
+        all_results = defaultdict(list)
+        for eq in expanded_queries:
+            results = self.search(eq)
+            all_results[eq].extend(results)
+        return dict(all_results)
 
     @staticmethod
     def load_and_chunk_files(
@@ -238,3 +265,20 @@ def read_and_chunk_file(file_path: Path) -> Tuple[List[str], str]:
     text = read_text(file_path)
     chunks = chunk_text(text)
     return chunks, str(file_path)
+
+docs = [
+    "This is the first document.",
+    "This document is the second document.",
+    "And this is the third one.",
+    "Is this the first document?",
+]
+doc_paths = [
+    "doc1.txt",
+    "doc2.txt",
+    "doc3.txt",
+    "doc4.txt",
+]
+retriever = Retriever(docs, doc_paths)
+query = "what is machine learning?"
+results = retriever.expanded_search(query)
+print(results)

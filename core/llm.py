@@ -38,3 +38,21 @@ Answer:"""
         return response.text.strip()
     except Exception as e:
         return f"❌ Error generating answer: {e}"
+
+def get_llm_help(prompt: str = "") -> str:
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        return f"❌ Error generating expanded query: {e}"
+    
+def llm_query_expansion(query: str, prev_queries: List[str]) -> str:
+    previous_queries_section = (
+        f"Previous Queries: {', '.join(prev_queries)}\n" if prev_queries else ""
+    )
+    prompt = f"""You are a helpful assistant that expands user queries to be more specific and detailed. You can use previous queries as context. Avoid making the expanded query similar to previous queries. JUST GIVE THE EXPANDED QUERY WITHOUT ANY EXPLANATION.
+
+User Query: {query}
+{previous_queries_section}
+Expanded Query:"""
+    return get_llm_help(prompt)
