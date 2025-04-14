@@ -10,5 +10,6 @@
     "index_dir": "data/indices",
     "embedding_model": "sentence-transformers/all-mpnet-base-v2",
     "max_search_steps": 3,
+    "use_embedding": true,
     "top_k": 5
 }

@@ -9,6 +9,12 @@ import platform
 import shutil
 import pytesseract
 
+from utils.file_utils import load_config
+from utils.logger import AppLogger
+
+embedding_available = False
+logger = AppLogger("Watcher").get_logger()
+
 def configure_tesseract():
     system_name = platform.system()
 
@@ -41,6 +47,30 @@ def configure_tesseract():
         
         raise FileNotFoundError("Tesseract not found. Please install Tesseract or add it to your PATH.")
 
+def configure_embeddings():
+    config = load_config("config.json")
+    
+    if not config.get("use_embedding", False):
+        return
+    
+    try:
+        import spacy
+        try:
+            embedding_available = True
+            logger.info("Using existing SpaCy model for embeddings...")
+        except OSError:
+            logger.info("SpaCy model not found. Attempting to install...")
+            import subprocess
+            subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_lg"], 
+                        check=True)
+            logger.info("SpaCy model installed successfully.")
+            embedding_available = True
+    except ImportError:
+        logger.error("SpaCy is not installed. Please install SpaCy to use embeddings.")
+        config["use_embedding"] = False
+    except Exception as e:
+        raise RuntimeError(f"Error loading SpaCy model: {e}")
+        
 from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -58,7 +88,7 @@ load_dotenv()
 
 class InfoSynthApp:
     def __init__(self, config: dict = None):
-        self.config = config or self.load_config("config.json")
+        self.config = config or load_config("config.json")
         self.upload_dir = Path(self.config.get("upload_dir", "data/uploads"))
         self.library_path = Path(self.config.get("library_path", "data/library.json"))
         self.allowed_extensions = self.config.get("allowed_extensions", ["pdf"])
@@ -72,15 +102,6 @@ class InfoSynthApp:
 
         self._setup()
 
-    def load_config(self, path: str) -> dict:
-        """Load configuration file from JSON file."""
-        try:
-            import json
-
-            with open(path, "r") as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
 
     def _setup(self):
         self.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -95,7 +116,16 @@ class InfoSynthApp:
         _, chunks, sources = Retriever.load_and_chunk_files(
             self.file_library, self.library_path
         )
-        self.retriever = Retriever(chunks, sources, max_results=5)
+        self.retriever = Retriever(chunks, sources, max_results=5, use_embedding=embedding_available)
+
+        # if self.config.get("use_embeddings", False):
+        #     embedding_model = self.config.get("embedding_model", "sentence-transformers/all-mpnet-base-v2")
+        #     st.info(f"Attempting to enable semantic embeddings with model: {embedding_model}")
+        #     success = self.retriever.enable_embeddings(model_name=embedding_model)
+        #     if success:
+        #         st.success("✅ Semantic search enabled")
+        #     else:
+        #         st.warning("⚠️ Semantic search unavailable - using TF-IDF and BM25 only")
 
     def handle_query(self, query: str):
         """Handle search queries with basic classification."""
@@ -186,7 +216,7 @@ class InfoSynthApp:
 
                             if chunks:
                                 self.retriever = Retriever(
-                                    chunks, sources, max_results=5
+                                    chunks, sources, max_results=5, use_embedding=embedding_available
                                 )
                             else:
                                 self.retriever = None
@@ -227,6 +257,7 @@ if __name__ == "__main__":
     mp.freeze_support()
     app = InfoSynthApp()
     configure_tesseract()
+    configure_embeddings()
 
     if not watcher_state.watcher_started:
         threading.Thread(

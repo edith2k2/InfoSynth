@@ -82,11 +82,11 @@ class QueryClassifier:
         }
 
         self.retrieval_weights = {
-            QueryType.FACTUAL: {"dense": 0.2, "sparse": 0.8},
-            QueryType.REASONING: {"dense": 0.75, "sparse": 0.25},
-            QueryType.COMPARISON: {"dense": 0.60, "sparse": 0.40},
-            QueryType.EXPLORATORY: {"dense": 0.80, "sparse": 0.20},
-            QueryType.PROCEDURAL: {"dense": 0.55, "sparse": 0.45},
+            QueryType.FACTUAL: {"dense": 0.2, "sparse": 0.4, "semantic": 0.4},
+            QueryType.REASONING: {"dense": 0.3, "sparse": 0.2, "semantic": 0.5},
+            QueryType.COMPARISON: {"dense": 0.25, "sparse": 0.25, "semantic": 0.5},
+            QueryType.EXPLORATORY: {"dense": 0.2, "sparse": 0.1, "semantic": 0.7},
+            QueryType.PROCEDURAL: {"dense": 0.3, "sparse": 0.3, "semantic": 0.4},
         }
 
     def correct_query(self, query: str) -> Tuple[str, Dict[str, str]]:

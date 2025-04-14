@@ -84,3 +84,13 @@ def update_library_with_file(file_path: Path) -> dict:
         "created_at": datetime.fromtimestamp(file_info.st_ctime).isoformat(),
         "modified_at": datetime.fromtimestamp(file_info.st_mtime).isoformat(),
     }
+
+def load_config( path: str) -> dict:
+    """Load configuration file from JSON file."""
+    try:
+        import json
+
+        with open(path, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}

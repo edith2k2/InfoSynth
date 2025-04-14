@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -17,26 +17,37 @@ import pytesseract
 from PIL import Image
 import numpy as np
 from rank_bm25 import BM25Okapi
+import spacy
 
-from pathlib import Path
+import importlib.util
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 from core.query_classifier import QueryClassifier, QueryType
-from llm import llm_query_expansion
-
+from core.llm import llm_query_expansion
 class Retriever:
     def __init__(
-        self, documents: List[str], doc_paths: List[str], max_results: int = 5
+        self, documents: List[str], doc_paths: List[str], max_results: int = 5, use_embedding: bool = False
     ):
         self.documents = documents
         self.doc_paths = doc_paths
+        # TF-IDF
         self.vectorizer = TfidfVectorizer(stop_words="english")
         self.doc_vectors = self.vectorizer.fit_transform(documents)
         # BM25
         self.tokenized_docs = [self._tokenize_text(doc) for doc in documents]
         self.bm25_index = BM25Okapi(self.tokenized_docs)
         self.max_results = max_results
+        #dense embeddign
+        self.document_embeddings = None
+        self.use_embedding = use_embedding
+        if self.use_embedding:
+            try:
+                self.nlp = spacy.load("en_core_web_lg")
+                self.document_embeddings = self._compute_document_embeddings()
+            except Exception as e:
+                print(f"Error loading spaCy model: {e}")
+                self.use_embedding = False
         # Query Classifier
         self.query_classifier = QueryClassifier()
 
@@ -50,10 +61,18 @@ class Retriever:
         analyzer = vectorizer.build_analyzer()
         return analyzer(text)
     
+    def _compute_document_embeddings(self):
+        document_embeddings = []
+        for doc in self.documents:
+            # Get document vector (using spaCy's built-in word vectors)
+            doc_vector = self.nlp(doc).vector
+            document_embeddings.append(doc_vector)
+        return np.array(document_embeddings)
+    
     
     def search(self, query: str) -> List[Tuple[str, str, float]]:
         """
-        Perform hybrid search using both TF-IDF and BM25
+        Perform hybrid search using TF-IDF, BM25, and optionally dense embeddings
         Returns: List of (document snippet, source path, score)
         """
         # Classify query to determine optimal weights
@@ -75,35 +94,48 @@ class Retriever:
         # Normalize scores
         max_tfidf = max(tfidf_similarities) if max(tfidf_similarities) > 0 else 1
         max_bm25 = max(bm25_scores) if max(bm25_scores) > 0 else 1
-        
+
         tfidf_norm = tfidf_similarities / max_tfidf
         bm25_norm = bm25_scores / max_bm25
         
-        # Combine scores with weights
-        combined_scores = (dense_weight * tfidf_norm) + (sparse_weight * bm25_norm)
+        # Only use dense embeddings if enabled
+        if self.use_embedding and hasattr(self, 'nlp') and self.document_embeddings is not None:
+            semantic_weight = weights.get('semantic', 0.33)
+            # Dense embedding similarity
+            query_embedding = self.nlp(query).vector
+            dense_similarities = np.array([
+                np.dot(query_embedding, doc_embedding) / 
+                (np.linalg.norm(query_embedding) * np.linalg.norm(doc_embedding) + 1e-8)
+                for doc_embedding in self.document_embeddings
+            ])
+            
+            # Normalize dense scores
+            max_dense = max(dense_similarities) if max(dense_similarities) > 0 else 1
+            dense_norm = dense_similarities / max_dense
+            
+            # Combine all scores using weights from query classifier
+            combined_scores = (sparse_weight * tfidf_norm) + \
+                            (dense_weight * bm25_norm) + \
+                            (semantic_weight * dense_norm)
+        else:
+            # If embeddings not available, just use sparse search with equal weights
+            combined_scores = (sparse_weight * tfidf_norm) + (dense_weight * bm25_norm)
         
         # Get top results
         ranked_indices = combined_scores.argsort()[::-1][:self.max_results]
         
-        # # Log some information about the search
-        # st.session_state.setdefault('last_search_info', {})
-        # st.session_state.last_search_info = {
-        #     'query_type': query_analysis.query_type.value,
-        #     'weights': {
-        #         'sparse': sparse_weight,
-        #         'dense': dense_weight,
-        #     },
-        #     'confidence': query_analysis.confidence
-        # }
-        
         results = []
         for idx in ranked_indices:
-            # Include both scores for debug/comparison
+            # Include all scores for debug/comparison
             result_meta = {
                 'combined_score': combined_scores[idx],
                 'tfidf_score': tfidf_similarities[idx],
                 'bm25_score': bm25_scores[idx]
             }
+            
+            # Only include dense score if embeddings were used
+            if self.use_embedding and hasattr(self, 'nlp') and self.document_embeddings is not None:
+                result_meta['dense_score'] = dense_similarities[idx]
             
             # Return the document, source and combined score
             results.append(
@@ -259,26 +291,3 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]
         chunks.append(" ".join(current_chunk))
 
     return chunks
-
-
-def read_and_chunk_file(file_path: Path) -> Tuple[List[str], str]:
-    text = read_text(file_path)
-    chunks = chunk_text(text)
-    return chunks, str(file_path)
-
-docs = [
-    "This is the first document.",
-    "This document is the second document.",
-    "And this is the third one.",
-    "Is this the first document?",
-]
-doc_paths = [
-    "doc1.txt",
-    "doc2.txt",
-    "doc3.txt",
-    "doc4.txt",
-]
-retriever = Retriever(docs, doc_paths)
-query = "what is machine learning?"
-results = retriever.expanded_search(query)
-print(results)
