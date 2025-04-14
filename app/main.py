@@ -10,6 +10,7 @@ import shutil
 import pytesseract
 from dotenv import load_dotenv
 
+
 ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
@@ -17,11 +18,19 @@ if str(ROOT_DIR) not in sys.path:
 from core.query_classifier import QueryClassifier
 from core.retriever import Retriever
 from core.llm import generate_answer
-from utils.file_utils import process_uploaded_files, load_file_library
+from utils.logger import AppLogger
+from utils.file_utils import (
+    get_mtime,
+    process_uploaded_files,
+    load_file_library,
+    load_and_chunk_files,
+)
 from utils.watcher_state import watcher_state
 from utils.file_watcher import start_watcher
 
 load_dotenv()
+
+logger = AppLogger("Watcher").get_logger()
 
 
 def configure_tesseract():
@@ -84,21 +93,31 @@ class InfoSynthApp:
 
         self._setup()
 
+    @staticmethod
+    @st.cache_resource(show_spinner=False)
+    def build_retriever(library: dict, file_library_path: Path):
+        logger.info("Building retriever...")
+        _, chunks, sources = load_and_chunk_files(library, file_library_path)
+        return Retriever(chunks, sources, max_results=watcher_state.max_results)
+
     def load_config(self, path: str) -> dict:
         """Load configuration file from JSON file."""
+        logger.info(f"Loading configuration from {path}")
         try:
             import json
 
             with open(path, "r") as f:
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
+            logger.error(f"Failed to load configuration from {path}")
             return {}
 
     def _setup(self):
+        logger.info("Setting up InfoSynth...")
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.library_path.parent.mkdir(parents=True, exist_ok=True)
         st.set_page_config(page_title=self.page_title, layout=self.page_layout)
-        self.icons = {  # TODO: add icons for the other file types that we support
+        self.icons = {
             ".pdf": '<i class="fas fa-file-pdf" style="color: #e74c3c;"></i>',
             ".docx": '<i class="fas fa-file-word" style="color: #2980b9;"></i>',
             ".csv": '<i class="fas fa-file-csv" style="color: #27ae60;"></i>',
@@ -108,17 +127,9 @@ class InfoSynthApp:
             ".txt": '<i class="fas fa-file-alt" style="color: #34495e;"></i>',
         }
 
-        self.file_library = load_file_library(self.library_path)
-
-        if not self.file_library:
-            return
-
-        _, chunks, sources = Retriever.load_and_chunk_files(
-            self.file_library, self.library_path
-        )
-        self.retriever = Retriever(
-            chunks, sources, max_results=watcher_state.max_results
-        )
+        mtime = get_mtime(self.library_path)
+        self.file_library = load_file_library(self.library_path, mtime=mtime)
+        self.retriever = self.build_retriever(self.file_library, self.library_path)
 
     def handle_query(self, query: str, retriever=None):
         """Handle search queries with basic classification."""
@@ -156,17 +167,17 @@ class InfoSynthApp:
         # LEFT
         @st.fragment(run_every=5)
         def show_recent_documents():
-            self.file_library = load_file_library(self.library_path)
+            mtime = get_mtime(self.library_path)
+            self.file_library = load_file_library(self.library_path, mtime=mtime)
             st.markdown("### Recent Documents")
 
             recent_files = []
             if self.file_library:
-                sorted_files = sorted(
+                recent_files = sorted(
                     self.file_library.items(),
                     key=lambda x: x[1].get("created_at", ""),
                     reverse=True,
-                )
-                recent_files = sorted_files[:4]
+                )[:4]
 
             cols = st.columns(5)
 
@@ -206,26 +217,22 @@ class InfoSynthApp:
                     ]
 
                     if new_files:
-                        self.file_library, chunks, sources = process_uploaded_files(
+                        self.file_library = process_uploaded_files(
                             new_files,
                             self.upload_dir,
                             self.file_library,
                             self.library_path,
                         )
-                        self.retriever = (  # TODO: understand why the self.retriever variable is being reassigned here (ask Johnny).
-                            # from my understanding, this is a check to see if BM25 finds any results for the query
-                            Retriever(
-                                chunks, sources, max_results=watcher_state.max_results
-                            )
-                            if chunks
-                            else None
+                        self.retriever = self.build_retriever(
+                            self.file_library, self.library_path
                         )
 
         with left_col:
 
             @st.fragment(run_every=5)
             def refresh_library():
-                current_library = load_file_library(self.library_path)
+                mtime = get_mtime(self.library_path)
+                current_library = load_file_library(self.library_path, mtime=mtime)
                 st.subheader("📚 Document Library")
 
                 if not current_library:
