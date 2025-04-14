@@ -15,9 +15,10 @@ logger = AppLogger("Watcher").get_logger()
 
 
 class UploadFolderHandler(FileSystemEventHandler):
-    def __init__(self, upload_dir: Path, library_path: Path):
+    def __init__(self, upload_dir: Path, library_path: Path, config: dict):
         self.upload_dir = upload_dir
         self.library_path = library_path
+        self.config = config
         mtime = get_mtime(self.library_path)
         self.library = load_file_library(library_path, mtime=mtime)
 

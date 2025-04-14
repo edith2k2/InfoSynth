@@ -121,7 +121,7 @@ def start_watcher(watch_dirs: List[Path], library_path: Path, config: dict):
             )
             watcher_state.files_changed = True
 
-        handler = UploadFolderHandler(directory, library_path)
+        handler = UploadFolderHandler(directory, library_path, config)
         observer.schedule(handler, str(directory), recursive=False)
         logger.info(f"\t* Watching: {directory.resolve()}")
 
@@ -397,7 +397,7 @@ class InfoSynthApp:
                         key="form_top_k_input",
                     )
 
-                    submitted = st.form_submit_button("Save Settings")
+                    submitted = st.form_submit_button("Save")
                     st.markdown("</div>", unsafe_allow_html=True)
 
                 if submitted:
@@ -408,37 +408,51 @@ class InfoSynthApp:
                         show_status_message("Configuration updated.", "success")
 
             with st.expander("Monitored Folders", expanded=True):
+                st.markdown("### Currently Watched Folders")
+                current_folders = self.config.get("watch_folders", [])
+
+                for idx, folder in enumerate(current_folders):
+                    col1, col2 = st.columns([4, 1])
+                    folder_path = Path(folder).resolve()
+                    try:
+                        relative_path = str(folder_path.relative_to(ROOT_DIR))
+                    except ValueError:
+                        relative_path = str(folder_path)
+
+                    with col1:
+                        st.markdown(
+                            f"<div class='folder-box'>{relative_path}</div>",
+                            unsafe_allow_html=True,
+                        )
+                    with col2:
+                        if st.button("X", key=f"remove_folder_{idx}"):
+                            updated_folders = (
+                                current_folders[:idx] + current_folders[idx + 1 :]
+                            )
+                            self.config = update_config_key(
+                                self.config_path, "watch_folders", updated_folders
+                            )
+                            self.watch_folders = [Path(p) for p in updated_folders]
+                            watcher_state.watcher_started = False
+                            show_status_message(
+                                "Folder removed from watch list.", "info"
+                            )
+                            st.rerun()
+
+                st.markdown("---")
+                st.markdown("### Add New Folder")
+
                 with st.form("watcher_folder_form"):
-                    current_folders = self.config.get("watch_folders", [])
-
-                    st.markdown("### Currently Watching")
-                    folders_to_keep = []
-
-                    for idx, folder in enumerate(current_folders):
-                        col1, col2 = st.columns([4, 1])
-                        with col1:
-                            st.markdown(f"- `{folder}`")
-                        with col2:
-                            remove = st.checkbox("🗑", key=f"remove_folder_{idx}")
-                            if not remove:
-                                folders_to_keep.append(folder)
-
-                    st.markdown("---")
-                    st.markdown("### Add New Folder")
-
                     new_folder = st.text_input("Folder path", key="new_watch_folder")
-
-                    submitted = st.form_submit_button("Save Changes")
+                    submitted = st.form_submit_button("Add Folder")
 
                 if submitted:
                     if new_folder:
                         new_folder_path = Path(new_folder.strip()).resolve()
-
                         existing_paths = set(
-                            map(lambda p: str(Path(p).resolve()), folders_to_keep)
+                            map(lambda p: str(Path(p).resolve()), current_folders)
                         )
 
-                        # Prevent duplicates
                         if not new_folder_path.exists() or not new_folder_path.is_dir():
                             show_status_message("Folder does not exist.", "error")
                             return
@@ -446,12 +460,12 @@ class InfoSynthApp:
                             show_status_message("Folder is already watched.", "warning")
                             return
                         else:
-                            folders_to_keep.append(str(new_folder_path))
+                            current_folders.append(str(new_folder_path))
 
                     self.config = update_config_key(
-                        self.config_path, "watch_folders", folders_to_keep
+                        self.config_path, "watch_folders", current_folders
                     )
-                    self.watch_folders = [Path(p) for p in folders_to_keep]
+                    self.watch_folders = [Path(p) for p in current_folders]
                     watcher_state.watcher_started = False
                     show_status_message("Configuration updated.", "success")
                     st.rerun()

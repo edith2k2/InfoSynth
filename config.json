@@ -16,9 +16,7 @@
     ".bmp",
     ".tiff"
   ],
-  "watch_folders": [
-    "test/downloads"
-  ],
+  "watch_folders": [],
   "page_title": "InfoSynth",
   "page_layout": "wide",
   "max_search_steps": 3,
