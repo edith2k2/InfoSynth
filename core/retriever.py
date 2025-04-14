@@ -291,3 +291,8 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]
         chunks.append(" ".join(current_chunk))
 
     return chunks
+
+def read_and_chunk_file(file_path: Path) -> Tuple[List[str], str]:
+    text = read_text(file_path)
+    chunks = chunk_text(text)
+    return chunks, str(file_path)
