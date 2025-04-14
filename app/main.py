@@ -1,5 +1,5 @@
 import threading
-import time
+from typing import List
 import streamlit as st
 from pathlib import Path
 import os
@@ -9,11 +9,12 @@ import platform
 import shutil
 import pytesseract
 from dotenv import load_dotenv
-
+import json
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
+
 
 from core.query_classifier import QueryClassifier
 from core.retriever import Retriever
@@ -25,8 +26,11 @@ from utils.file_utils import (
     load_file_library,
     load_and_chunk_files,
 )
+from utils.config_manager import get_default_config, update_config_key
 from utils.watcher_state import watcher_state
-from utils.file_watcher import start_watcher
+from utils.file_watcher import UploadFolderHandler
+from utils.file_utils import show_status_message
+from watchdog.observers import Observer
 
 load_dotenv()
 
@@ -77,9 +81,60 @@ def apply_external_styles():
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
+def start_watcher(watch_dirs: List[Path], library_path: Path, config: dict):
+    if not watch_dirs:
+        logger.warning("No watch folders provided. File watcher is disabled.")
+        return
+
+    # 🔁 Stop old observer
+    if watcher_state.observer:
+        logger.info("Stopping previous file watcher...")
+        watcher_state.observer.stop()
+        watcher_state.observer.join()
+        watcher_state.observer = None
+        watcher_state.watcher_started = False
+
+    allowed_exts = [
+        ext.lower().lstrip(".") for ext in config.get("allowed_extensions", [])
+    ]
+    logger.info(
+        f"Monitoring {len(watch_dirs)} folder(s) with extensions: {allowed_exts}"
+    )
+
+    mtime = get_mtime(library_path)
+    library = load_file_library(library_path, mtime=mtime)
+
+    observer = Observer()
+
+    for directory in watch_dirs:
+        # Find files matching allowed extensions
+        all_files = []
+        for ext in allowed_exts:
+            all_files.extend(directory.glob(f"*.{ext}"))
+
+        existing_files = {meta["file_name"] for meta in library.values()}
+        new_files = [f for f in all_files if f.name not in existing_files]
+
+        if new_files:
+            library = process_uploaded_files(
+                new_files, directory, library, library_path
+            )
+            watcher_state.files_changed = True
+
+        handler = UploadFolderHandler(directory, library_path, config)
+        observer.schedule(handler, str(directory), recursive=False)
+        logger.info(f"\t* Watching: {directory.resolve()}")
+
+    observer.start()
+    watcher_state.observer = observer
+    watcher_state.watcher_started = True
+    watcher_state.watched_paths = set(map(str, watch_dirs))
+
+
 class InfoSynthApp:
     def __init__(self, config: dict = None):
         self.config = config or self.load_config("config.json")
+        self.config_path = Path("config.json")
         self.upload_dir = Path(self.config.get("upload_dir", "data/uploads"))
         self.library_path = Path(self.config.get("library_path", "data/library.json"))
         self.allowed_extensions = self.config.get("allowed_extensions", ["pdf"])
@@ -87,6 +142,11 @@ class InfoSynthApp:
         self.page_title = self.config.get("page_title", "InfoSynth")
         self.page_layout = self.config.get("page_layout", "wide")
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+
+        if not self.gemini_api_key:
+            raise ValueError(
+                "GEMINI_API_KEY is not set. Please set it in your environment variables."
+            )
 
         self.classifier = QueryClassifier()
         self.retriever = None
@@ -102,15 +162,17 @@ class InfoSynthApp:
 
     def load_config(self, path: str) -> dict:
         """Load configuration file from JSON file."""
-        logger.info(f"Loading configuration from {path}")
+        DEFAULT_CONFIG = get_default_config()
         try:
-            import json
-
             with open(path, "r") as f:
-                return json.load(f)
+                config = json.load(f)
+                return {**DEFAULT_CONFIG, **config}
         except (FileNotFoundError, json.JSONDecodeError):
-            logger.error(f"Failed to load configuration from {path}")
-            return {}
+            # Create default config if file not found or invalid JSON
+            with open(path, "w") as f:
+                json.dump(DEFAULT_CONFIG, f, indent=2)
+            logger.info(f"Created default config file at {path}")
+            return DEFAULT_CONFIG
 
     def _setup(self):
         logger.info("Setting up InfoSynth...")
@@ -319,36 +381,109 @@ class InfoSynthApp:
         with st.sidebar:
             st.header("Configuration")
 
-            with st.expander("🕒 Time Range", expanded=False):
+            with st.expander("Time Range", expanded=True):
                 st.markdown("Temporal controls placeholder")
 
-            with st.expander("⚙️ Search Configuration", expanded=False):
-                # TODO: figure out how to use this user input to do something meaningful (i.e., if we do not already)
-                # TODO: is the `key` field in these input elements supposed to help us with something?
-                watcher_state.max_chain_of_thought_search_steps = int(
-                    st.number_input(
-                        "Maximum chain of thought search steps",
-                        min_value=0,
-                        max_value=5,
-                        value=1,
-                        key="steps_input",
-                    )
-                )
+            with st.expander("Search Configuration", expanded=True):
+                with st.form(key="config_form"):
+                    st.markdown('<div class="form-block">', unsafe_allow_html=True)
 
-                watcher_state.max_results = int(
-                    st.number_input(
+                    new_top_k = st.number_input(
                         "Number of results to retrieve (top-k)",
                         min_value=1,
-                        max_value=20,  # this is the max number of results we want the user to be able to set because 20 is already too many
-                        value=5,  # default value that the input element will show for k
+                        max_value=20,
+                        value=self.config.get("top_k", 5),
                         step=1,
-                        # on_change=self.render_ui(),
-                        key="top_k_input",
+                        key="form_top_k_input",
                     )
-                )
+
+                    submitted = st.form_submit_button("Save")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                if submitted:
+                    watcher_state.max_results = new_top_k
+                    updated = update_config_key(self.config_path, "top_k", new_top_k)
+                    if updated:
+                        self.config = updated
+                        show_status_message("Configuration updated.", "success")
+
+            with st.expander("Monitored Folders", expanded=True):
+                st.markdown("### Currently Watched Folders")
+                current_folders = self.config.get("watch_folders", [])
+
+                for idx, folder in enumerate(current_folders):
+                    col1, col2 = st.columns([4, 1])
+                    folder_path = Path(folder).resolve()
+                    try:
+                        relative_path = str(folder_path.relative_to(ROOT_DIR))
+                    except ValueError:
+                        relative_path = str(folder_path)
+
+                    with col1:
+                        st.markdown(
+                            f"<div class='folder-box'>{relative_path}</div>",
+                            unsafe_allow_html=True,
+                        )
+                    with col2:
+                        if st.button("X", key=f"remove_folder_{idx}"):
+                            updated_folders = (
+                                current_folders[:idx] + current_folders[idx + 1 :]
+                            )
+                            self.config = update_config_key(
+                                self.config_path, "watch_folders", updated_folders
+                            )
+                            self.watch_folders = [Path(p) for p in updated_folders]
+                            watcher_state.watcher_started = False
+                            show_status_message(
+                                "Folder removed from watch list.", "info"
+                            )
+                            st.rerun()
+
+                st.markdown("---")
+                st.markdown("### Add New Folder")
+
+                with st.form("watcher_folder_form"):
+                    new_folder = st.text_input("Folder path", key="new_watch_folder")
+                    submitted = st.form_submit_button("Add Folder")
+
+                if submitted:
+                    if new_folder:
+                        new_folder_path = Path(new_folder.strip()).resolve()
+                        existing_paths = set(
+                            map(lambda p: str(Path(p).resolve()), current_folders)
+                        )
+
+                        if not new_folder_path.exists() or not new_folder_path.is_dir():
+                            show_status_message("Folder does not exist.", "error")
+                            return
+                        elif str(new_folder_path) in existing_paths:
+                            show_status_message("Folder is already watched.", "warning")
+                            return
+                        else:
+                            current_folders.append(str(new_folder_path))
+
+                    self.config = update_config_key(
+                        self.config_path, "watch_folders", current_folders
+                    )
+                    self.watch_folders = [Path(p) for p in current_folders]
+                    watcher_state.watcher_started = False
+                    show_status_message("Configuration updated.", "success")
+                    st.rerun()
 
     def run(self):
         """Main application entry point"""
+        current_paths = set(map(str, self.watch_folders))
+        previous_paths = watcher_state.watched_paths
+
+        if current_paths != previous_paths or not watcher_state.watcher_started:
+            watcher_state.watched_paths = current_paths
+            logger.info("🔁 Starting/restarting file watcher...")
+
+            threading.Thread(
+                target=start_watcher,
+                args=(self.watch_folders, self.library_path, self.config),
+                daemon=True,
+            ).start()
         self.render_ui()
 
 
@@ -357,11 +492,4 @@ if __name__ == "__main__":
     app = InfoSynthApp()
     configure_tesseract()
 
-    if not watcher_state.watcher_started:
-        threading.Thread(
-            target=start_watcher,
-            args=(app.watch_folders, app.library_path),
-            daemon=True,
-        ).start()
-        watcher_state.watcher_started = True
     app.run()
