@@ -98,7 +98,7 @@ class InfoSynthApp:
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.library_path.parent.mkdir(parents=True, exist_ok=True)
         st.set_page_config(page_title=self.page_title, layout=self.page_layout)
-        self.icons = { # TODO: add icons for the other file types that we support
+        self.icons = {  # TODO: add icons for the other file types that we support
             ".pdf": '<i class="fas fa-file-pdf" style="color: #e74c3c;"></i>',
             ".docx": '<i class="fas fa-file-word" style="color: #2980b9;"></i>',
             ".csv": '<i class="fas fa-file-csv" style="color: #27ae60;"></i>',
@@ -116,15 +116,15 @@ class InfoSynthApp:
         _, chunks, sources = Retriever.load_and_chunk_files(
             self.file_library, self.library_path
         )
-        self.retriever = Retriever(chunks, sources, max_results=watcher_state.max_results)
-
+        self.retriever = Retriever(
+            chunks, sources, max_results=watcher_state.max_results
+        )
 
     def handle_query(self, query: str, retriever=None):
         """Handle search queries with basic classification."""
         analysis = self.classifier.analyze_query(query)
         retriever = retriever or self.retriever
 
-        st.session_state.analysis = analysis
         st.session_state.answer = None
         st.session_state.results = []
 
@@ -212,13 +212,14 @@ class InfoSynthApp:
                             self.file_library,
                             self.library_path,
                         )
-                        self.retriever = ( # TODO: understand why the self.retriever variable is being reassigned here (ask Johnny).
-                            # from my understanding, this is a check to see if BM25 finds any results for the query 
-                            Retriever(chunks, sources, max_results=watcher_state.max_results)
+                        self.retriever = (  # TODO: understand why the self.retriever variable is being reassigned here (ask Johnny).
+                            # from my understanding, this is a check to see if BM25 finds any results for the query
+                            Retriever(
+                                chunks, sources, max_results=watcher_state.max_results
+                            )
                             if chunks
                             else None
                         )
-
 
         with left_col:
 
@@ -281,35 +282,31 @@ class InfoSynthApp:
                 else:
                     self.handle_query(query)
 
-            analysis = st.session_state.get("analysis")
             answer = st.session_state.get("answer")
             results = st.session_state.get("results", [])
 
-            if analysis:
-                st.markdown(f"🔍 **Query:** {analysis.corrected_query}")
-                st.markdown(f"🧠 **Intent:** `{analysis.query_type.value}`")
-                st.markdown(f"📊 **Confidence:** {analysis.confidence:.2f}")
-                if analysis.corrections:
-                    st.markdown("✏️ **Corrections:**")
-                    for orig, corr in analysis.corrections.items():
-                        st.markdown(f"- `{orig}` → `{corr}`")
-
             if answer:
                 st.markdown("### 💬 Answer")
-                st.success(answer) # this is the LLM's answer
+                st.success(answer)  # this is the LLM's answer
 
                 st.markdown("### 📂 Sources for LLM's answer")
-                # NOTE: results is a list of tuples (e.g., its length is 5 when k for topk = 5). The first element of the tuple is the chunk, the second is the filepath, 
-                # the third is the combined score, and the fourth is a dict containing combined_score, tfidf_score, and bm25_score. 
-                for i, (_, path, _, _) in enumerate(results): # TODO: Is this what we want to display here?
+                # NOTE: results is a list of tuples (e.g., its length is 5 when k for topk = 5). The first element of the tuple is the chunk, the second is the filepath,
+                # the third is the combined score, and the fourth is a dict containing combined_score, tfidf_score, and bm25_score.
+                for i, (_, path, _, _) in enumerate(
+                    results
+                ):  # TODO: Is this what we want to display here?
                     st.markdown(f"**{i+1}.** `{path}`")
 
                 st.markdown("---")
                 st.markdown("### BM25 Results")
-                for i, (chunk, source, score, additional) in enumerate(results): # these are BM25 results
+                for i, (chunk, source, score, additional) in enumerate(
+                    results
+                ):  # these are BM25 results
                     st.markdown(f"**{i+1}.** 📄 **Source:** `{source}`")
                     st.markdown(f"🧩 **Score:** {score:.4f}")
-                    st.markdown(f"> {chunk[:300]}...") # TODO: do we want to allow the user to see the whole chunk? Can implement an on-demand dropdown if needed on the UI
+                    st.markdown(
+                        f"> {chunk[:300]}..."
+                    )  # TODO: do we want to allow the user to see the whole chunk? Can implement an on-demand dropdown if needed on the UI
                     st.markdown("---")
         # Sidebar
         with st.sidebar:
@@ -321,24 +318,27 @@ class InfoSynthApp:
             with st.expander("⚙️ Search Configuration", expanded=False):
                 # TODO: figure out how to use this user input to do something meaningful (i.e., if we do not already)
                 # TODO: is the `key` field in these input elements supposed to help us with something?
-                watcher_state.max_chain_of_thought_search_steps = int(st.number_input(
-                    "Maximum chain of thought search steps",
-                    min_value=0,
-                    max_value=5,
-                    value=1,
-                    key="steps_input",
-                ))
+                watcher_state.max_chain_of_thought_search_steps = int(
+                    st.number_input(
+                        "Maximum chain of thought search steps",
+                        min_value=0,
+                        max_value=5,
+                        value=1,
+                        key="steps_input",
+                    )
+                )
 
-                watcher_state.max_results = int(st.number_input(
-                    "Number of results to retrieve (top-k)",
-                    min_value=1,
-                    max_value=20, # this is the max number of results we want the user to be able to set because 20 is already too many
-                    value=5, # default value that the input element will show for k
-                    step=1,
-                    # on_change=self.render_ui(),
-                    key="top_k_input",
-                ))
-                
+                watcher_state.max_results = int(
+                    st.number_input(
+                        "Number of results to retrieve (top-k)",
+                        min_value=1,
+                        max_value=20,  # this is the max number of results we want the user to be able to set because 20 is already too many
+                        value=5,  # default value that the input element will show for k
+                        step=1,
+                        # on_change=self.render_ui(),
+                        key="top_k_input",
+                    )
+                )
 
     def run(self):
         """Main application entry point"""
