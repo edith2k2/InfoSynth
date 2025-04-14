@@ -346,18 +346,20 @@ class InfoSynthApp:
 
         # RIGHT
         with right_col:
-            query = st.text_input(
-                "Enter your search query",
-                value=st.session_state.get("query_input", ""),
-                key="search_input",
-            )
-            st.session_state.query_input = query
+            with st.form("search_form"):
+                query = st.text_input(
+                    "Enter your search query",
+                    value=st.session_state.get("query_input", ""),
+                    key="search_input",
+                )
+                st.session_state.query_input = query
 
-            if st.button("Search", key="search_button_top"):
-                if not query.strip():
-                    st.warning("Please enter a query.")
-                else:
-                    self.handle_query(query)
+                submitted = st.form_submit_button("Search")
+                if submitted:
+                    if not query.strip():
+                        st.warning("Please enter a query.")
+                    else:
+                        self.handle_query(query)
 
             answer = st.session_state.get("answer")
             results = st.session_state.get("results", [])
