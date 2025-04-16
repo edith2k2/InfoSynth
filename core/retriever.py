@@ -1,3 +1,4 @@
+
 from datetime import datetime
 from typing import List, Tuple, Optional
 from pathlib import Path
@@ -5,61 +6,63 @@ from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from collections import defaultdict
 import streamlit as st
-import json
-import re
-import fitz
-import docx
-import csv
-import markdown
-from bs4 import BeautifulSoup
-from striprtf.striprtf import rtf_to_text
-import pytesseract
-from PIL import Image
+
 import numpy as np
 from rank_bm25 import BM25Okapi
 import spacy
 
 import importlib.util
 
+from pathlib import Path
+from core.query_classifier import QueryClassifier
+from utils.logger import AppLogger
+
+
 ROOT_DIR = Path(__file__).resolve().parent.parent
+logger = AppLogger(name="Retriever").get_logger()
 
 from core.query_classifier import QueryClassifier, QueryType
 from core.llm import llm_query_expansion
+
 class Retriever:
     def __init__(
         self, documents: List[str], doc_paths: List[str], max_results: int = 5, use_embedding: bool = False
     ):
         self.documents = documents
         self.doc_paths = doc_paths
-        # TF-IDF
-        self.vectorizer = TfidfVectorizer(stop_words="english")
-        self.doc_vectors = self.vectorizer.fit_transform(documents)
-        # BM25
-        self.tokenized_docs = [self._tokenize_text(doc) for doc in documents]
-        self.bm25_index = BM25Okapi(self.tokenized_docs)
+
+        self.vectorizer = None
+        self.doc_vectors = None
         self.max_results = max_results
-        #dense embeddign
-        self.document_embeddings = None
-        self.use_embedding = use_embedding
-        if self.use_embedding:
-            try:
-                self.nlp = spacy.load("en_core_web_lg")
-                self.document_embeddings = self._compute_document_embeddings()
-            except Exception as e:
-                print(f"Error loading spaCy model: {e}")
-                self.use_embedding = False
+        if self.documents:
+            self.vectorizer = TfidfVectorizer(stop_words="english")
+            self.doc_vectors = self.vectorizer.fit_transform(self.documents)
+
+            # BM25
+            self.tokenized_docs = [self._tokenize_text(doc) for doc in documents]
+            self.bm25_index = BM25Okapi(self.tokenized_docs)
+            
+            #dense embedding
+            self.document_embeddings = None
+            self.use_embedding = use_embedding
+            if self.use_embedding:
+                try:
+                    self.nlp = spacy.load("en_core_web_lg")
+                    self.document_embeddings = self._compute_document_embeddings()
+                except Exception as e:
+                    print(f"Error loading spaCy model: {e}")
+                    self.use_embedding = False
         # Query Classifier
         self.query_classifier = QueryClassifier()
 
     def _tokenize_text(self, text: str) -> List[str]:
         """Tokenize text using sklearn's vectorizer"""
         vectorizer = CountVectorizer(
-            lowercase=True, 
-            stop_words='english',
-            token_pattern=r'(?u)\b\w\w+\b'  
+            lowercase=True, stop_words="english", token_pattern=r"(?u)\b\w\w+\b"
         )
         analyzer = vectorizer.build_analyzer()
         return analyzer(text)
+
     
     def _compute_document_embeddings(self):
         document_embeddings = []
@@ -68,35 +71,35 @@ class Retriever:
             doc_vector = self.nlp(doc).vector
             document_embeddings.append(doc_vector)
         return np.array(document_embeddings)
-    
-    
+
     def search(self, query: str) -> List[Tuple[str, str, float]]:
         """
         Perform hybrid search using TF-IDF, BM25, and optionally dense embeddings
-        Returns: List of (document snippet, source path, score)
+        Returns: List of (document snippet, source path, score, additional scores information)
         """
         # Classify query to determine optimal weights
         query_analysis = self.query_classifier.analyze_query(query)
-        
+
         # Get retrieval weights based on query type
         weights = query_analysis.weights
-        sparse_weight = weights.get('sparse', 0.5)
-        dense_weight = weights.get('dense', 0.5)
-        
+        sparse_weight = weights.get("sparse", 0.5)
+        dense_weight = weights.get("dense", 0.5)
+
         # Get TF-IDF results
         query_vector = self.vectorizer.transform([query])
         tfidf_similarities = cosine_similarity(query_vector, self.doc_vectors).flatten()
-        
+
         # BM25 results
         tokenized_query = self._tokenize_text(query)
         bm25_scores = np.array(self.bm25_index.get_scores(tokenized_query))
-        
+
         # Normalize scores
         max_tfidf = max(tfidf_similarities) if max(tfidf_similarities) > 0 else 1
         max_bm25 = max(bm25_scores) if max(bm25_scores) > 0 else 1
 
         tfidf_norm = tfidf_similarities / max_tfidf
         bm25_norm = bm25_scores / max_bm25
+
         
         # Only use dense embeddings if enabled
         if self.use_embedding and hasattr(self, 'nlp') and self.document_embeddings is not None:
@@ -123,16 +126,16 @@ class Retriever:
         
         # Get top results
         ranked_indices = combined_scores.argsort()[::-1][:self.max_results]
-        
+
         results = []
         for idx in ranked_indices:
             # Include all scores for debug/comparison
             result_meta = {
-                'combined_score': combined_scores[idx],
-                'tfidf_score': tfidf_similarities[idx],
-                'bm25_score': bm25_scores[idx]
+                "combined_score": combined_scores[idx],
+                "tfidf_score": tfidf_similarities[idx],
+                "bm25_score": bm25_scores[idx],
             }
-            
+
             # Only include dense score if embeddings were used
             if self.use_embedding and hasattr(self, 'nlp') and self.document_embeddings is not None:
                 result_meta['dense_score'] = dense_similarities[idx]
@@ -296,3 +299,4 @@ def read_and_chunk_file(file_path: Path) -> Tuple[List[str], str]:
     text = read_text(file_path)
     chunks = chunk_text(text)
     return chunks, str(file_path)
+
