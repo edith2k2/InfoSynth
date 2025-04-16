@@ -37,6 +37,12 @@ load_dotenv()
 logger = AppLogger("Watcher").get_logger()
 
 
+from utils.file_utils import load_config
+from utils.logger import AppLogger
+
+embedding_available = False
+logger = AppLogger("Watcher").get_logger()
+
 def configure_tesseract():
     system_name = platform.system()
 
@@ -63,10 +69,36 @@ def configure_tesseract():
                 pytesseract.pytesseract.tesseract_cmd = path
                 print(f"Tesseract configured using: {path}")
                 return
-
         raise FileNotFoundError(
             "Tesseract not found. Please install Tesseract or add it to your PATH."
         )
+
+def configure_embeddings():
+    config = load_config("config.json")
+    
+    if not config.get("use_embedding", False):
+        return
+    
+    try:
+        import spacy
+        try:
+            embedding_available = True
+            logger.info("Using existing SpaCy model for embeddings...")
+        except OSError:
+            logger.info("SpaCy model not found. Attempting to install...")
+            import subprocess
+            subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_lg"], 
+                        check=True)
+            logger.info("SpaCy model installed successfully.")
+            embedding_available = True
+    except ImportError:
+        logger.error("SpaCy is not installed. Please install SpaCy to use embeddings.")
+        config["use_embedding"] = False
+    except Exception as e:
+        raise RuntimeError(f"Error loading SpaCy model: {e}")
+        
+from dotenv import load_dotenv
+
 
 
 def apply_external_styles():
@@ -155,10 +187,10 @@ class InfoSynthApp:
 
     @staticmethod
     @st.cache_resource(show_spinner=False)
-    def build_retriever(library: dict, file_library_path: Path):
+    def build_retriever(library: dict, file_library_path: Path, use_embedding: bool = False):
         logger.info("Building retriever...")
         _, chunks, sources = load_and_chunk_files(library, file_library_path)
-        return Retriever(chunks, sources, max_results=watcher_state.max_results)
+        return Retriever(chunks, sources, max_results=watcher_state.max_results, use_embedding=use_embedding)
 
     def load_config(self, path: str) -> dict:
         """Load configuration file from JSON file."""
@@ -173,7 +205,6 @@ class InfoSynthApp:
                 json.dump(DEFAULT_CONFIG, f, indent=2)
             logger.info(f"Created default config file at {path}")
             return DEFAULT_CONFIG
-
     def _setup(self):
         logger.info("Setting up InfoSynth...")
         self.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -191,7 +222,7 @@ class InfoSynthApp:
 
         mtime = get_mtime(self.library_path)
         self.file_library = load_file_library(self.library_path, mtime=mtime)
-        self.retriever = self.build_retriever(self.file_library, self.library_path)
+        self.retriever = self.build_retriever(self.file_library, self.library_path, use_embedding=embedding_available)
 
     def handle_query(self, query: str, retriever=None):
         """Handle search queries with basic classification."""
@@ -202,7 +233,6 @@ class InfoSynthApp:
                 "error",
             )
             return
-
         analysis = self.classifier.analyze_query(query)
         retriever = retriever or self.retriever
 
@@ -294,7 +324,7 @@ class InfoSynthApp:
                             self.library_path,
                         )
                         self.retriever = self.build_retriever(
-                            self.file_library, self.library_path
+                            self.file_library, self.library_path, use_embedding=embedding_available
                         )
 
         with left_col:
@@ -501,5 +531,6 @@ if __name__ == "__main__":
     mp.freeze_support()
     app = InfoSynthApp()
     configure_tesseract()
+    configure_embeddings()
 
     app.run()

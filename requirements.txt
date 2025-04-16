@@ -15,4 +15,5 @@ pytesseract
 pillow
 rank_bm25
 numpy
+beir
 orjson

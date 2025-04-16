@@ -80,3 +80,43 @@ infosynth/
 ├── requirements.txt           # Project Dependencies
 └── README.md
 ```
+## 📊 Evaluation
+
+### Step 1: Download a BEIR dataset
+
+```bash
+python evaluation/download_beir.py --dataset scifact --output_dir ./evaluation/beir_datasets
+```
+
+Available datasets include:
+
+- **scifact**: Scientific fact-checking (smaller dataset, good for testing)
+- **nfcorpus**: News and medical articles
+- **fiqa**: Financial domain Q&A
+- **arguana**: Argumentative question answering
+- **scidocs**: Scientific documents
+- **hotpotqa**: Multi-hop question answering
+
+### Step 2: Run the evaluation
+
+```bash
+python evaluation/infosynth_beir_adapter.py --dataset ./evaluation/beir_datasets/scifact --output evaluation/results.json
+```
+
+This will:
+
+- Load the specified BEIR dataset.
+- Use InfoSynth's existing retriever for document search.
+- Evaluate the retrieval performance using standard IR metrics.
+- Save the results to the specified output file.
+
+### 📈 Evaluation Metrics
+
+The evaluation computes several standard information retrieval metrics:
+
+- **NDCG (Normalized Discounted Cumulative Gain)**: Measures ranking quality.
+- **MAP (Mean Average Precision)**: Measures precision at different recall levels.
+- **Recall**: Proportion of relevant documents retrieved.
+- **Precision**: Proportion of retrieved documents that are relevant.
+
+Each metric is calculated at various cutoff points (k=1, 3, 5, 10, 20, 50, 100).

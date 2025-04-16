@@ -261,5 +261,25 @@ def process_uploaded_files(
 
     # Chunk and update library with chunks/num_chunks
     library, _, _ = load_and_chunk_files(library, library_path)
-
     return library
+
+def update_library_with_file(file_path: Path) -> dict:
+    """Create a metadata entry for a file"""
+    file_info = file_path.stat()
+    return {
+        "file_name": file_path.name,
+        "file_path": str(file_path.resolve()),
+        "size_kb": round(file_info.st_size / 1024, 2),
+        "created_at": datetime.fromtimestamp(file_info.st_ctime).isoformat(),
+        "modified_at": datetime.fromtimestamp(file_info.st_mtime).isoformat(),
+    }
+
+def load_config( path: str) -> dict:
+    """Load configuration file from JSON file."""
+    try:
+        import json
+
+        with open(path, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}

@@ -20,5 +20,6 @@
   "page_title": "InfoSynth",
   "page_layout": "wide",
   "max_search_steps": 3,
+  "use_embedding": true,
   "top_k": 5
 }
