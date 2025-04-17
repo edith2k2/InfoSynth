@@ -421,6 +421,9 @@ class InfoSynthApp:
                     st.markdown(f"🧠 **BM25 Score:** {bm25_score:.4f}")
                     st.markdown(f"> {chunk[:300]}...")
                     st.markdown("---")
+                    with st.expander("Show full chunk"):
+                        st.markdown(chunk)
+
 
         # Sidebar
         with st.sidebar:
