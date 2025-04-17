@@ -19,6 +19,7 @@ if str(ROOT_DIR) not in sys.path:
 from core.query_classifier import QueryClassifier
 from core.retriever import Retriever
 from core.llm import generate_answer
+from core.llm import feedback_loop_rag
 from utils.logger import AppLogger
 from utils.file_utils import (
     get_mtime,
@@ -247,10 +248,16 @@ class InfoSynthApp:
                     top_chunks = [r[0] for r in results]
                     sources = [r[1] for r in results]
                     scores = [r[2] for r in results]
-                    answer = generate_answer(query, top_chunks, scores)
+                    # answer = generate_answer(query, top_chunks, scores)
+                    answer_object = feedback_loop_rag(query, [], retriever) # using the feedback loop method instead
+                    answer = answer_object["final_answer"]
+                    initial_sources = answer_object["initial_sources"]
+                    refined_sources = answer_object["refined_sources"]
 
                     st.session_state.answer = answer
                     st.session_state.results = results
+                    st.session_state.initial_sources = initial_sources
+                    st.session_state.refined_sources = refined_sources
             else:
                 st.info("No results found for your query.")
 
@@ -396,27 +403,25 @@ class InfoSynthApp:
 
             if answer:
                 st.markdown("### 💬 Answer")
-                st.success(answer)  # this is the LLM's answer
+                st.success(answer)
 
-                st.markdown("### 📂 Sources for LLM's answer")
-                # NOTE: results is a list of tuples (e.g., its length is 5 when k for topk = 5). The first element of the tuple is the chunk, the second is the filepath,
-                # the third is the combined score, and the fourth is a dict containing combined_score, tfidf_score, and bm25_score.
-                for i, (_, path, _, _) in enumerate(
-                    results
-                ):  # TODO: Is this what we want to display here?
-                    st.markdown(f"**{i+1}.** `{path}`")
+                # # Show initial sources from expanded query
+                # st.markdown("### 🔍 Initial Sources (Query Expansion)")
+                # for i, (chunk, path, bm25_score) in enumerate(st.session_state.get("initial_sources", [])):
+                #     st.markdown(f"**{i+1}.** 📄 **Source:** `{path}`")
+                #     st.markdown(f"🧠 **BM25 Score:** {bm25_score:.4f}")
+                #     st.markdown(f"> {chunk[:300]}...")  # Truncate for readability
+                #     st.markdown("---")
 
-                st.markdown("---")
-                st.markdown("### BM25 Results")
-                for i, (chunk, source, score, additional) in enumerate(
-                    results
-                ):  # these are BM25 results
-                    st.markdown(f"**{i+1}.** 📄 **Source:** `{source}`")
-                    st.markdown(f"🧩 **Score:** {score:.4f}")
-                    st.markdown(
-                        f"> {chunk[:300]}..."
-                    )  # TODO: do we want to allow the user to see the whole chunk? Can implement an on-demand dropdown if needed on the UI
+                # # Show refined sources from keyword-based re-query
+                # st.markdown("### 🎯 Refined Sources (Keyword-Based Retrieval)")
+                st.markdown("### 🎯 Sources ")
+                for i, (chunk, path, bm25_score) in enumerate(st.session_state.get("refined_sources", [])):
+                    st.markdown(f"**{i+1}.** 📄 **Source:** `{path}`")
+                    st.markdown(f"🧠 **BM25 Score:** {bm25_score:.4f}")
+                    st.markdown(f"> {chunk[:300]}...")
                     st.markdown("---")
+
         # Sidebar
         with st.sidebar:
             st.header("Configuration")
