@@ -187,10 +187,10 @@ class InfoSynthApp:
 
     @staticmethod
     @st.cache_resource(show_spinner=False)
-    def build_retriever(library: dict, file_library_path: Path, use_embedding: bool = False):
+    def build_retriever(library: dict, file_library_path: Path, use_embedding: bool = False, top_k: int = 5):
         logger.info("Building retriever...")
         _, chunks, sources = load_and_chunk_files(library, file_library_path)
-        return Retriever(chunks, sources, max_results=watcher_state.max_results, use_embedding=use_embedding)
+        return Retriever(chunks, sources, max_results=top_k, use_embedding=use_embedding)
 
     def load_config(self, path: str) -> dict:
         """Load configuration file from JSON file."""
@@ -222,7 +222,7 @@ class InfoSynthApp:
 
         mtime = get_mtime(self.library_path)
         self.file_library = load_file_library(self.library_path, mtime=mtime)
-        self.retriever = self.build_retriever(self.file_library, self.library_path, use_embedding=embedding_available)
+        self.retriever = self.build_retriever(self.file_library, self.library_path, use_embedding=embedding_available, top_k=self.config.get("top_k"))
 
     def handle_query(self, query: str, retriever=None):
         """Handle search queries with basic classification."""
@@ -324,7 +324,7 @@ class InfoSynthApp:
                             self.library_path,
                         )
                         self.retriever = self.build_retriever(
-                            self.file_library, self.library_path, use_embedding=embedding_available
+                            self.file_library, self.library_path, use_embedding=embedding_available, top_k=self.config.get("top_k")
                         )
 
         with left_col:
@@ -425,6 +425,8 @@ class InfoSynthApp:
                 st.markdown("Temporal controls placeholder")
 
             with st.expander("Search Configuration", expanded=True):
+                new_top_k = self.config.get("top_k", 5)
+                submitted_top_k = False
                 with st.form(key="config_form"):
                     st.markdown('<div class="form-block">', unsafe_allow_html=True)
 
@@ -437,10 +439,10 @@ class InfoSynthApp:
                         key="form_top_k_input",
                     )
 
-                    submitted = st.form_submit_button("Save")
+                    submitted_top_k = st.form_submit_button("Save")
                     st.markdown("</div>", unsafe_allow_html=True)
 
-                if submitted:
+                if submitted_top_k:
                     watcher_state.max_results = new_top_k
                     updated = update_config_key(self.config_path, "top_k", new_top_k)
                     if updated:
