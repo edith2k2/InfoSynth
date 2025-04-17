@@ -249,7 +249,7 @@ class InfoSynthApp:
                     sources = [r[1] for r in results]
                     scores = [r[2] for r in results]
                     # answer = generate_answer(query, top_chunks, scores)
-                    answer_object = feedback_loop_rag(query, [], retriever) # using the feedback loop method instead
+                    answer_object = feedback_loop_rag(query, [], retriever, search_web=st.session_state.get('search_web')) # using the feedback loop method instead
                     answer = answer_object["final_answer"]
                     initial_sources = answer_object["initial_sources"]
                     refined_sources = answer_object["refined_sources"]
@@ -383,6 +383,11 @@ class InfoSynthApp:
 
         # RIGHT
         with right_col:
+            search_web = st.toggle("🔍 Use Internet Search (in addition to local documents)", value=False)
+
+            # Store in session state
+            st.session_state.search_web = search_web
+
             with st.form("search_form"):
                 query = st.text_input(
                     "Enter your search query",
@@ -420,9 +425,9 @@ class InfoSynthApp:
                     st.markdown(f"**{i+1}.** 📄 **Source:** `{path}`")
                     st.markdown(f"🧠 **BM25 Score:** {bm25_score:.4f}")
                     st.markdown(f"> {chunk[:300]}...")
-                    st.markdown("---")
                     with st.expander("Show full chunk"):
                         st.markdown(chunk)
+                    st.markdown("---")
 
 
         # Sidebar
